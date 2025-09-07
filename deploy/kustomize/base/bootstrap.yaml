@@ -39,3 +39,4 @@ spec:
       - name: creds
         secret:
           secretName: workspace-credentials
+

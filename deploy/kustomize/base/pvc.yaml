@@ -11,3 +11,4 @@ spec:
     requests:
       storage: 1Gi
   # no storageClassName -> use cluster default
+

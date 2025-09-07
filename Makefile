@@ -39,7 +39,7 @@ ENV_SECRET_NAME   ?= maintainerd-bootstrap-env
 CREDS_SECRET_NAME ?= workspace-credentials
 
 # Path to the JSON creds file on your machine
-CREDS_FILE ?= ./cmd/bootstrap/credentials.json
+CREDS_FILE ?= ./cmd/bootstrap/credentials.jsony
 CREDS_KEY  ?= credentials.json
 
 # Docker registry (for ghcr secret)
@@ -64,12 +64,17 @@ help:
 	@echo "make argocd-ui       -> port-forward Argo CD UI to https://localhost:8088"
 	@echo "make ensure-ns       -> ensure namespace $(NAMESPACE) exists"
 	@echo "make apply-ghcr-secret -> create/update docker-registry Secret 'ghcr-secret'"
-	@echo "make apply-pvc       -> apply pvc.yaml into ns $(NAMESPACE)"
-	@echo "make bootstrap-apply -> apply bootstrap.yaml Job into ns $(NAMESPACE)"
+	@echo "make apply-pvc       -> apply base PVC into ns $(NAMESPACE)"
+	@echo "make bootstrap-apply -> apply base bootstrap Job into ns $(NAMESPACE)"
 	@echo "make bootstrap-wait  -> wait for bootstrap Job completion"
 	@echo "make bootstrap-restart-> delete and re-run bootstrap Job"
 	@echo "make cluster-up      -> kind-up + ns + ghcr secret + secrets + pvc + bootstrap"
-	@echo "make maintainerd-apply -> deploy maintainerd.yaml (Deployment + Service + Ingress)"
+	@echo "make maintainerd-apply -> apply base Deployment + Service + Ingress"
+	@echo "make kustomize-base-apply -> apply all base resources with kustomize"
+	@echo "make kustomize-diff-prod   -> diff prod overlay against cluster"
+	@echo "make kustomize-diff-dev    -> diff dev overlay against cluster"
+	@echo "make kustomize-dryrun-prod -> server-side dry-run apply (prod)"
+	@echo "make kustomize-dryrun-dev  -> server-side dry-run apply (dev)"
 	@echo "make maintainerd-delete -> delete Deployment/Service maintainerd"
 	@echo "make maintainerd-restart -> rollout restart Deployment/maintainerd"
 	@echo "make maintainerd-port-forward -> forward :2525 -> svc/maintainerd:2525"
@@ -153,13 +158,13 @@ apply-ghcr-secret:
 
 .PHONY: apply-pvc
 apply-pvc:
-	@echo "Applying pvc.yaml to namespace $(NAMESPACE)"
-	@kubectl -n $(NAMESPACE) $(if $(KUBECONTEXT),--context $(KUBECONTEXT)) apply -f pvc.yaml
+	@echo "Applying deploy/kustomize/base/pvc.yaml to namespace $(NAMESPACE)"
+	@kubectl -n $(NAMESPACE) $(if $(KUBECONTEXT),--context $(KUBECONTEXT)) apply -f deploy/kustomize/base/pvc.yaml
 
 .PHONY: bootstrap-apply
 bootstrap-apply:
-	@echo "Applying bootstrap.yaml Job to namespace $(NAMESPACE)"
-	@kubectl -n $(NAMESPACE) $(if $(KUBECONTEXT),--context $(KUBECONTEXT)) apply -f bootstrap.yaml
+	@echo "Applying deploy/kustomize/base/bootstrap.yaml Job to namespace $(NAMESPACE)"
+	@kubectl -n $(NAMESPACE) $(if $(KUBECONTEXT),--context $(KUBECONTEXT)) apply -f deploy/kustomize/base/bootstrap.yaml
 
 .PHONY: bootstrap-wait
 bootstrap-wait:
@@ -170,7 +175,7 @@ bootstrap-wait:
 bootstrap-restart:
 	@echo "Deleting and re-applying bootstrap Job"
 	@kubectl -n $(NAMESPACE) $(if $(KUBECONTEXT),--context $(KUBECONTEXT)) delete job/maintainerd-bootstrap --ignore-not-found=true
-	@kubectl -n $(NAMESPACE) $(if $(KUBECONTEXT),--context $(KUBECONTEXT)) apply -f bootstrap.yaml
+	@kubectl -n $(NAMESPACE) $(if $(KUBECONTEXT),--context $(KUBECONTEXT)) apply -f deploy/kustomize/base/bootstrap.yaml
 	@$(MAKE) bootstrap-wait
 
 # ---- Argo CD install (cluster add-on) ----
@@ -225,8 +230,35 @@ cluster-down: kind-down
 # ---- maintainerd server deployment ----
 .PHONY: maintainerd-apply
 maintainerd-apply: bootstrap-wait ingress-nginx-install
-	@echo "Applying maintainerd.yaml to namespace $(NAMESPACE)"
-	@kubectl -n $(NAMESPACE) $(if $(KUBECONTEXT),--context $(KUBECONTEXT)) apply -f maintainerd.yaml
+	@echo "Applying deploy/kustomize/base/maintainerd.yaml to namespace $(NAMESPACE)"
+	@kubectl -n $(NAMESPACE) $(if $(KUBECONTEXT),--context $(KUBECONTEXT)) apply -f deploy/kustomize/base/maintainerd.yaml
+
+# ---- kustomize base (apply all base resources) ----
+.PHONY: kustomize-base-apply
+kustomize-base-apply:
+	@echo "Applying Kustomize base (deploy/kustomize/base) to namespace $(NAMESPACE)"
+	@kubectl -n $(NAMESPACE) $(if $(KUBECONTEXT),--context $(KUBECONTEXT)) apply -k deploy/kustomize/base
+
+# ---- kustomize validation helpers ----
+.PHONY: kustomize-diff-prod
+kustomize-diff-prod:
+	@echo "Diffing prod overlay against cluster (ns=$(NAMESPACE))"
+	@kubectl $(if $(KUBECONTEXT),--context $(KUBECONTEXT)) -n $(NAMESPACE) diff -k deploy/kustomize/overlays/prod || true
+
+.PHONY: kustomize-diff-dev
+kustomize-diff-dev:
+	@echo "Diffing dev overlay against cluster (ns=$(NAMESPACE))"
+	@kubectl $(if $(KUBECONTEXT),--context $(KUBECONTEXT)) -n $(NAMESPACE) diff -k deploy/kustomize/overlays/dev || true
+
+.PHONY: kustomize-dryrun-prod
+kustomize-dryrun-prod: ensure-ns
+	@echo "Server-side dry-run for prod overlay (ns=$(NAMESPACE))"
+	@kubectl $(if $(KUBECONTEXT),--context $(KUBECONTEXT)) -n $(NAMESPACE) apply --dry-run=server -k deploy/kustomize/overlays/prod
+
+.PHONY: kustomize-dryrun-dev
+kustomize-dryrun-dev: ensure-ns
+	@echo "Server-side dry-run for dev overlay (ns=$(NAMESPACE))"
+	@kubectl $(if $(KUBECONTEXT),--context $(KUBECONTEXT)) -n $(NAMESPACE) apply --dry-run=server -k deploy/kustomize/overlays/dev
 
 .PHONY: maintainerd-delete
 maintainerd-delete:

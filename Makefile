@@ -39,7 +39,7 @@ ENV_SECRET_NAME   ?= maintainerd-bootstrap-env
 CREDS_SECRET_NAME ?= workspace-credentials
 
 # Path to the JSON creds file on your machine
-CREDS_FILE ?= ./cmd/bootstrap/credentials.jsony
+CREDS_FILE ?= ./cmd/bootstrap/credentials.json
 CREDS_KEY  ?= credentials.json
 
 # Docker registry (for ghcr secret)

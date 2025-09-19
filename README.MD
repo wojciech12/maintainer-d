@@ -54,4 +54,5 @@ We deploy using plain manifests (no Helm). Key targets:
 - Apply app resources:
   - `make manifests-apply`
 - Verify:
-  - `kubectl -n maintainerd get pvc,job,deploy,svc,ing`
+  - `kubectl -n maintainerd get pvc,deploy,svc,ing`
+  - The Deployment runs an initContainer that bootstraps the DB before the server starts.

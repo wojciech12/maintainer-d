@@ -48,7 +48,8 @@ func (s *EventListener) Init(dbPath, fossaAPItokenEnvVar, ghToken, repo, org str
 	log.Printf("Init: DBG, project map has %d entries", len(s.Projects))
 	log.Printf("Init: DBG, they are...")
 	for _, project := range s.Projects {
-		log.Printf("info: project: %s (%d)", project.Name, project.ID)
+		log.Printf("info: project: %s, projectID: %d, maintainer count: %d", project.Name, project.ID,
+			len(project.Maintainers))
 	}
 	token := os.Getenv(fossaAPItokenEnvVar)
 	if token == "" {

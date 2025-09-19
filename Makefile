@@ -4,6 +4,10 @@ REGISTRY ?= ghcr.io
 IMAGE ?= $(REGISTRY)/$(GH_ORG_LC)/maintainerd:latest
 WHOAMI=$(shell whoami)
 
+# GHCR auth (optional for push). If set, we will docker login before push.
+GHCR_USER  ?= $(DOCKER_REGISTRY_USERNAME)
+GHCR_TOKEN ?= $(GITHUB_GHCR_TOKEN)
+
 
 
 # ---- Image ----
@@ -11,6 +15,13 @@ WHOAMI=$(shell whoami)
 image:
 	@echo "Building container image: $(IMAGE)"
 	@docker buildx build -t $(IMAGE) -f Dockerfile .
+	@echo "Ensuring docker is logged in to $(REGISTRY) (uses GHCR_TOKEN if set)"
+	@if [ -n "$(GHCR_TOKEN)" ]; then \
+		echo "Logging into $(REGISTRY) as $(GHCR_USER) using token from GHCR_TOKEN"; \
+		echo "$(GHCR_TOKEN)" | docker login $(REGISTRY) -u "$(GHCR_USER)" --password-stdin; \
+	else \
+		echo "GHCR_TOKEN not set; attempting push with existing docker auth"; \
+	fi
 	@echo "Pushing image: $(IMAGE)"
 	@docker push $(IMAGE)
 	@echo "Image pushed. If kind cluster 'maintainerd' is running, rolling restart Deployment."
@@ -59,6 +70,7 @@ help:
 	@echo "make kind-up         -> create kind cluster 'maintainerd'"
 	@echo "make kind-down       -> delete kind cluster 'maintainerd'"
 	@echo "make image           -> build+push $(IMAGE), then restart Deployment if kind up"
+	@echo "                      (uses GHCR_TOKEN/GITHUB_GHCR_TOKEN + GHCR_USER/DOCKER_REGISTRY_USERNAME for ghcr login)"
 	@echo "make ensure-ns       -> ensure namespace $(NAMESPACE) exists"
 	@echo "make apply-ghcr-secret -> create/update docker-registry Secret 'ghcr-secret'"
 	@echo "make manifests-apply -> kubectl apply -f deploy/manifests (prod-only)"
@@ -155,6 +167,8 @@ manifests-apply:
 manifests-delete:
 	@echo "Deleting manifests in deploy/manifests from namespace $(NAMESPACE)"
 	@kubectl -n $(NAMESPACE) $(if $(KUBECONTEXT),--context $(KUBECONTEXT)) delete -f deploy/manifests --ignore-not-found
+
+
  
 # ---- ingress controller (nginx) for kind ----
 .PHONY: ingress-nginx-install

@@ -34,3 +34,4 @@ This document gives agents instructions and tips for working in this repository.
 - Keep changes minimal and focused. Match existing Go style and module layout.
 - Avoid unrelated refactors in the same change. Update docs/Makefile if deployment surface changes.
 - Use the "The Friends method" of writing commit messages to describe patches where each commit message is notionally pre-fixed with the sentence, "This is the change that " and then the commit message continues this sentence, for example, "adds repo being monitored to log output at loglevel INFO"
+f

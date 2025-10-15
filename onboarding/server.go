@@ -175,7 +175,7 @@ func (s *EventListener) handleWebhook(w http.ResponseWriter, r *http.Request) {
 		}
 		// Build and post summary comment (using GitHub handles only)
 		var comment string
-		comment += "### 🧪 maintainerd - CNCF FOSSA Team Membership Update\n\n"
+		comment += "### maintainer-d - CNCF FOSSA Team Membership Update\n\n"
 		comment += fmt.Sprintf("Project: %s\n\n", project.Name)
 		for _, a := range actions {
 			comment += fmt.Sprintf("- %s\n", a)
@@ -209,14 +209,14 @@ func (s *EventListener) handleWebhook(w http.ResponseWriter, r *http.Request) {
 				// Get Project from db
 				var project model.Project
 				project = s.Projects[projectName]
-				actions, err := signProjectUpForFOSSA(r.Context(), s.Store, s.FossaClient, project)
+				actions, err := s.signProjectUpForFOSSA(project)
 				if err != nil {
 					log.Printf("handleWebhook: ERR, failed to send FOSSA invitations: %v", err)
 				}
 
 				// Format the steps as a Markdown comment
 				var comment string
-				comment += "###  🧪 maintainerd - CNCF FOSSA Onboarding Report\n\n" +
+				comment += "###  maintainer-d CNCF FOSSA onboarding - Report\n\n" +
 					"#### :spiral_notepad: Actions taken during onboarding...\n\n"
 				for _, action := range actions {
 					comment += fmt.Sprintf("- %s\n", action)
@@ -225,9 +225,9 @@ func (s *EventListener) handleWebhook(w http.ResponseWriter, r *http.Request) {
 					comment += fmt.Sprintf("\n❌ Onboarding encountered some problems: `%s`\n", err)
 				} else {
 					comment += "---\n\n" +
-						"Once accepted:\n\n" +
-						"- 👤 Add an issue comment _/fossa-invite accepted_ to this issue, we will then add you to you team as a **Team Admin** ([FOSSA RBAC](https://docs.fossa.com/docs/role-based-access-control#team-roles)).\n\n" +
-						"- 📦 Then, _and only then_, can you start importing your code and documentation repositories into FOSSA: [Getting Started Guide](https://docs.fossa.com/docs/getting-started#importing-a-project).\n\n"
+						"When you have accepted your invitation to join CNCF FOSSA :\n\n" +
+						"- Add a comment _/fossa-invite accepted_ to this issue, the maintainer-d onboarding process will add you to you team as a **Team Admin** ([FOSSA RBAC](https://docs.fossa.com/docs/role-based-access-control#team-roles)).\n\n" +
+						"- then, _and only then_, can you start importing your code and documentation repositories into FOSSA: [Getting Started Guide](https://docs.fossa.com/docs/getting-started#importing-a-project).\n\n"
 				}
 				err = s.updateIssue(r.Context(), e.GetRepo().GetOwner().GetLogin(), e.GetRepo().GetName(), e.GetIssue().GetNumber(), comment)
 				if err != nil {
@@ -256,20 +256,20 @@ func (s *EventListener) handleHealth(w http.ResponseWriter, r *http.Request) {
 // to their registered email addresses. As invitations are sent, we build up a list of actions that were taken by the
 // process so that the client can report steps taken and their results; in actions we reference maintainers using their
 // public GitHub account keeping their registered email addresses private.
-func signProjectUpForFOSSA(context context.Context, store *db.SQLStore, fc *fossa.Client, project model.Project) ([]string, error) {
+func (s *EventListener) signProjectUpForFOSSA(project model.Project) ([]string, error) {
 	var actions []string
 
 	// Check for maintainers registered for this project
-	maintainers, err := store.GetMaintainersByProject(project.ID)
+	maintainers, err := s.Store.GetMaintainersByProject(project.ID)
 	if err != nil {
 		actions = append(actions, fmt.Sprintf(":x: %s maintainers are not yet registered.", project.Name))
 		return actions, fmt.Errorf("signProjectUpForFOSSA: no maintainers found for project %v, project ID", project)
 	}
 
-	actions = append(actions, fmt.Sprintf("✅  %s has %d registered maintainers", project.Name, len(maintainers)))
+	actions = append(actions, fmt.Sprintf("✅  %s has %d maintainers registered in maintainer-d", project.Name, len(maintainers)))
 
 	// Do we have a team already in FOSSA for @project?
-	serviceTeams, err := store.GetProjectServiceTeamMap("FOSSA")
+	serviceTeams, err := s.Store.GetProjectServiceTeamMap("FOSSA")
 	if err != nil {
 		actions = append(actions, fmt.Sprintf(":warning: Problem retrieving serviceTeams.  %v", err))
 	}
@@ -282,7 +282,7 @@ func signProjectUpForFOSSA(context context.Context, store *db.SQLStore, fc *foss
 				st.ServiceTeamID))
 	} else {
 		// create the team on FOSSA, add the team to the ServiceTeams
-		team, err := fc.CreateTeam(project.Name)
+		team, err := s.FossaClient.CreateTeam(project.Name)
 
 		if err != nil {
 			actions = append(actions, fmt.Sprintf(":x: Problem creating team on FOSSA for %s: %v", project.Name, err))
@@ -291,7 +291,7 @@ func signProjectUpForFOSSA(context context.Context, store *db.SQLStore, fc *foss
 			actions = append(actions,
 				fmt.Sprintf("👥  [%s team](https://app.fossa.com/account/settings/organization/teams/%d) has been created in FOSSA",
 					team.Name, team.ID))
-			_, err := store.CreateServiceTeam(project.ID, project.Name, team.ID, team.Name)
+			_, err := s.Store.CreateServiceTeam(project.ID, project.Name, team.ID, team.Name)
 			if err != nil {
 				fmt.Printf("handleWebhook: WRN, failed to create service team: %v", err)
 			}
@@ -305,17 +305,34 @@ func signProjectUpForFOSSA(context context.Context, store *db.SQLStore, fc *foss
 		return actions, fmt.Errorf(":x: no maintainers found for project %d", project.ID)
 	}
 	for _, maintainer := range maintainers {
-		err := fc.SendUserInvitation(maintainer.Email) // TODO See if I can Name the User on FOSSA!
+		err := s.FossaClient.SendUserInvitation(maintainer.Email) // TODO See if I can Name the User on FOSSA!
 
 		if errors.Is(err, fossa.ErrInviteAlreadyExists) {
 			actions = append(actions, fmt.Sprintf("@%s : you have a pending invitation to join CNCF FOSSA. Please check your registered email and accept the invitation within 48 hours.", maintainer.GitHubAccount))
 		} else if errors.Is(err, fossa.ErrUserAlreadyMember) {
-			// TODO Edge case - maintainers who are already signed up in FOSSA on another project.
+			// TODO Edge case - maintainers already signed up to CNCF FOSSA, maintainer on an another project?
+			actions = append(actions, fmt.Sprintf("@%s : You are CNCF FOSSA User", maintainer.GitHubAccount))
+			// TODO call fc.AddUserToTeamByEmail()
 			log.Printf("user is already a member, skipping")
 		} else if err != nil {
 			log.Printf("error sending invite: %v", err)
 			actions = append(actions, fmt.Sprintf("@%s : there was a problem sending a CNCF FOSSA invitation to you.", maintainer.GitHubAccount))
 		}
+	}
+
+	// check if the project team has imported their repos. If we label an onboarding issue with 'fossa' and the project
+	// has been manually setup in the past, better to report that repos have been imported into FOSSA.
+	teamMap, err := s.Store.GetProjectServiceTeamMap("FOSSA")
+	if err != nil {
+		return nil, err
+	}
+
+	count, repos, err := s.FossaClient.FetchImportedRepos(teamMap[project.ID].ServiceTeamID)
+	importedRepos := s.FossaClient.ImportedProjectLinks(repos)
+	if count == 0 {
+		actions = append(actions, fmt.Sprintf("The %s project has not yet imported repos", project.Name))
+	} else {
+		actions = append(actions, fmt.Sprintf("The %s project team have imported %d repo(s)<BR>%s", project.Name, count, importedRepos))
 	}
 
 	return actions, nil
@@ -407,7 +424,7 @@ func (s *EventListener) addProjectMaintainersToFossaTeam(ctx context.Context, pr
 			actions = append(actions, fmt.Sprintf("@%s: already a member; no action", handle))
 			continue
 		}
-		// Attempt to add to team as Team Admin (if role provided)
+		// Attempt to add to team as Team Admin
 		if err := s.FossaClient.AddUserToTeamByEmail(teamID, email, roleIDPtr); err != nil {
 			if errors.Is(err, fossa.ErrUserAlreadyMember) {
 				actions = append(actions, fmt.Sprintf("@%s: already a member; no action", handle))

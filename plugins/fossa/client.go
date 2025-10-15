@@ -8,7 +8,9 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -70,9 +72,9 @@ func (c *Client) FetchUsers() ([]User, error) {
 	fmt.Printf("")
 	for {
 		// Construct paginated URL
-		url := fmt.Sprintf("%s/users?count=%d&page=%d", c.APIBase, count, page)
+		usersEndpoint := fmt.Sprintf("%s/users?count=%d&page=%d", c.APIBase, count, page)
 
-		req, err := http.NewRequest("GET", url, nil)
+		req, err := http.NewRequest("GET", usersEndpoint, nil)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create request: %w", err)
 		}
@@ -106,7 +108,6 @@ func (c *Client) FetchUsers() ([]User, error) {
 		if len(users) < count {
 			break
 		}
-		fmt.Printf("FetchUsers page: %d users:%q \n", page, users)
 		page++
 	}
 	fmt.Printf("FetchUsers page: %d Found %d FOSSA Users\n", page, len(allUsers))
@@ -243,8 +244,8 @@ func (c *Client) FetchTeams() ([]Team, error) {
 
 // FetchTeamUserEmails calls GET /api/teams/{id}/members
 func (c *Client) FetchTeamUserEmails(teamID int) ([]string, error) {
-	var url = fmt.Sprintf("%s/teams/%d/members", c.APIBase, teamID)
-	req, _ := http.NewRequest("GET", url, nil)
+	var teamMemberEndpoint = fmt.Sprintf("%s/teams/%d/members", c.APIBase, teamID)
+	req, _ := http.NewRequest("GET", teamMemberEndpoint, nil)
 	req.Header.Set("Authorization", "Bearer "+c.APIKey)
 	req.Header.Set("Accept", "application/json")
 
@@ -307,8 +308,8 @@ func (c *Client) AddUserToTeamByEmail(teamID int, email string, roleID int) erro
 		return fmt.Errorf("failed to encode body: %w", err)
 	}
 	fmt.Printf("AddUserToTeamByEmail: %s\n", bodyPayload)
-	url := fmt.Sprintf("%s/teams/%d/users", c.APIBase, teamID)
-	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(jsonBody))
+	teamsUsersEndpoint := fmt.Sprintf("%s/teams/%d/users", c.APIBase, teamID)
+	req, err := http.NewRequest("PUT", teamsUsersEndpoint, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
@@ -352,10 +353,8 @@ func (c *Client) findUserIDByEmail(email string) (int, error) {
 	if target == "" {
 		return 0, fmt.Errorf("user not found by email: %s", email)
 	}
-	fmt.Printf("findUserIDByEmail: Searching for email %q\n", target)
 
 	for _, u := range users {
-		fmt.Printf("findUserIDByEmail:Found user with email %q should return %d from %q\n", u.Email, u.ID, u)
 		if normalizeEmail(u.Email) == target {
 			return u.ID, nil
 		}
@@ -401,14 +400,9 @@ func (c *Client) FetchTeamsMap() (map[string]Team, error) {
 
 // GetTeam returns a *@Team object for the team called @name if it can be retrieved and exists on FOSSA or
 // a nil Team and an error if FOSSA cannot find the team.
-func (c *Client) GetTeam(name string) (*Team, error) {
-	payload := map[string]string{"name": name}
-	jsonBody, err := json.Marshal(payload)
-	if err != nil {
-		return nil, fmt.Errorf("failed to encode body: %w", err)
-	}
+func (c *Client) GetTeam(teamID int) (*Team, error) {
 
-	req, err := http.NewRequest("GET", c.APIBase+"/teams", bytes.NewBuffer(jsonBody))
+	req, err := http.NewRequest("GET", c.APIBase+"/teams/"+strconv.Itoa(teamID), nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -480,6 +474,49 @@ func (c *Client) CreateTeam(name string) (*Team, error) {
 	}
 
 	return &team, nil
+}
+
+// FetchImportedRepos is a function that returns an ImportedProjects struct for the FOSSA Team associated with teamID.
+// returns the number of repos imported and the only first page of imported project records.
+func (c *Client) FetchImportedRepos(teamID int) (int, ImportedProjects, error) {
+	team, err := c.GetTeam(teamID)
+	repoCount := 0
+	if err != nil {
+		return 0, ImportedProjects{}, fmt.Errorf("call to c.GetTeam(%d) returned %w", teamID, err)
+	}
+	if team == nil {
+		return 0, ImportedProjects{}, fmt.Errorf("team not found %d", teamID)
+	}
+	req, err := http.NewRequest("GET", c.APIBase+"/teams/"+strconv.Itoa(teamID)+"/projects", nil)
+
+	if err != nil {
+		return 0, ImportedProjects{}, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return repoCount, ImportedProjects{}, fmt.Errorf("FetchImportedRepos failed %w", err)
+	}
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			return
+		}
+	}(resp.Body)
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return repoCount, ImportedProjects{}, fmt.Errorf("failed to read response body: %w", err)
+	}
+	var repos ImportedProjects
+	if err := json.Unmarshal(body, &repos); err != nil {
+		return repoCount, ImportedProjects{}, fmt.Errorf("failed to decode response: %w", err)
+	}
+	repoCount = repos.TotalCount
+	return repoCount, repos, nil
 }
 
 type TeamMembers struct {
@@ -567,10 +604,71 @@ type User struct {
 		AccessLevel string `json:"access_level"`
 	} `json:"organization"`
 }
+
+type ImportedProjects struct {
+	Results []struct {
+		Title   string `json:"title"`
+		Locator string `json:"locator"`
+	} `json:"results"`
+	PageSize   int `json:"pageSize"`
+	Page       int `json:"page"`
+	TotalCount int `json:"totalCount"`
+}
+
 type FossaError struct {
 	UUID           string `json:"uuid"`
 	Code           int    `json:"code"`
 	Message        string `json:"message"`
 	Name           string `json:"name"`
 	HTTPStatusCode int    `json:"httpStatusCode"`
+}
+
+// ImportedProjectLinks for each imported project in projects takes the Title and Locator fields and uses them to create
+// an unordered list of clickable projects in markdown format for use in GitHub Issue comments
+func (c *Client) ImportedProjectLinks(projects ImportedProjects) string {
+	if len(projects.Results) == 0 {
+		return ""
+	}
+
+	var b strings.Builder
+	for _, proj := range projects.Results {
+		if proj.Title == "" {
+			continue
+		}
+
+		link := formatLocator(proj.Locator)
+		if link == "" {
+			link = proj.Locator
+		}
+
+		fmt.Fprintf(&b, "- [%s](%s)\n", proj.Title, link)
+	}
+
+	return strings.TrimSpace(b.String())
+}
+
+func formatLocator(locator string) string {
+	if locator == "" {
+		return ""
+	}
+
+	loc := strings.TrimPrefix(locator, "git+")
+	if !strings.HasPrefix(loc, "http") && !strings.Contains(loc, "://") {
+		loc = "https://" + loc
+	}
+
+	u, err := url.Parse(loc)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+
+	if strings.HasSuffix(u.Host, ":") {
+		u.Host = strings.TrimSuffix(u.Host, ":")
+	}
+
+	if !strings.HasSuffix(u.Path, ".git") && strings.HasSuffix(locator, ".git") {
+		u.Path += ".git"
+	}
+
+	return u.String()
 }

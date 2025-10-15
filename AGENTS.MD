@@ -2,7 +2,7 @@
 This document gives agents instructions and tips for working in this repository. It applies to the entire repo.
 
 ## Purpose & Overview
-- `maintainerd` is a Go service with a SQLite-backed data layer that processes GitHub webhooks and onboards projects to services (e.g., FOSSA).
+- `maintainer-d` is a Go service with a SQLite-backed data layer that processes GitHub webhooks and onboards projects to services (e.g., FOSSA).
 - Deployment uses plain Kubernetes manifests under `deploy/manifests` (production only).
 
 ## Deploy Rules
@@ -33,5 +33,5 @@ This document gives agents instructions and tips for working in this repository.
 ## Coding Guidelines
 - Keep changes minimal and focused. Match existing Go style and module layout.
 - Avoid unrelated refactors in the same change. Update docs/Makefile if deployment surface changes.
-- Use the "The Friends method" of writing commit messages to describe patches where each commit message is notionally pre-fixed with the sentence, "This is the change that " and then the commit message continues this sentence, for example, "adds repo being monitored to log output at loglevel INFO"
+- Use the "The Friends method" of writing commit messages to describe patches where each commit message is notionally pre-fixed with the sentence, "This is the change that " and then the commit message continues this sentence, for example, (this is the change that) "adds the repo being monitored to log output at loglevel INFO"
 f

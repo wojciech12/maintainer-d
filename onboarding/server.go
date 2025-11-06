@@ -108,13 +108,13 @@ func (s *EventListener) handleWebhook(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		body := e.GetComment().GetBody()
-		
+
 		// Handle /label command
 		if strings.HasPrefix(body, "/label ") {
 			s.handleLabelCommand(r, e)
 			break
 		}
-		
+
 		if body != "/fossa-invite accepted" {
 			log.Printf("handleWebhook: WRN body does not have the command we are looking for: %v", body)
 			break
@@ -266,7 +266,7 @@ func (s *EventListener) fossaChosen(projectName string, r *http.Request, e *gith
 func (s *EventListener) handleLabelCommand(r *http.Request, e *github.IssueCommentEvent) {
 	body := e.GetComment().GetBody()
 	parts := strings.Fields(body)
-	
+
 	// Validate command format: /label <fossa|snyk>
 	if len(parts) != 2 {
 		comment := "Invalid `/label` command format. Usage: `/label fossa` or `/label snyk`"
@@ -275,7 +275,7 @@ func (s *EventListener) handleLabelCommand(r *http.Request, e *github.IssueComme
 		}
 		return
 	}
-	
+
 	labelName := strings.ToLower(parts[1])
 	if labelName != "fossa" && labelName != "snyk" {
 		comment := fmt.Sprintf("Invalid label `%s`. Only `fossa` and `snyk` labels are supported.", parts[1])
@@ -284,7 +284,7 @@ func (s *EventListener) handleLabelCommand(r *http.Request, e *github.IssueComme
 		}
 		return
 	}
-	
+
 	// Determine project from issue title
 	projectName, err := GetProjectNameFromProjectTitle(e.GetIssue().GetTitle())
 	if err != nil {
@@ -295,7 +295,7 @@ func (s *EventListener) handleLabelCommand(r *http.Request, e *github.IssueComme
 		}
 		return
 	}
-	
+
 	project, ok := s.Projects[projectName]
 	if !ok {
 		log.Printf("handleLabelCommand: WRN, project %q not found in cache", projectName)
@@ -305,11 +305,11 @@ func (s *EventListener) handleLabelCommand(r *http.Request, e *github.IssueComme
 		}
 		return
 	}
-	
+
 	// Authorization: check if actor is a registered maintainer for this project
 	actor := e.GetComment().GetUser().GetLogin()
 	isAuthorized := false
-	
+
 	maintainers, err := s.Store.GetMaintainersByProject(project.ID)
 	if err == nil {
 		for _, m := range maintainers {
@@ -319,7 +319,7 @@ func (s *EventListener) handleLabelCommand(r *http.Request, e *github.IssueComme
 			}
 		}
 	}
-	
+
 	if !isAuthorized {
 		log.Printf("handleLabelCommand: WRN, @%s is not authorized for project %q", actor, projectName)
 		comment := fmt.Sprintf("@%s, looks like you have not yet been registered in maintainer-d. A CNCF Projects Team member will be in touch to assist you further.", actor)
@@ -328,12 +328,12 @@ func (s *EventListener) handleLabelCommand(r *http.Request, e *github.IssueComme
 		}
 		return
 	}
-	
+
 	// Add the label to the issue
 	owner := e.GetRepo().GetOwner().GetLogin()
 	repo := e.GetRepo().GetName()
 	issueNumber := e.GetIssue().GetNumber()
-	
+
 	_, _, err = s.GitHubClient.Issues.AddLabelsToIssue(r.Context(), owner, repo, issueNumber, []string{labelName})
 	if err != nil {
 		log.Printf("handleLabelCommand: ERR, failed to add label %q to issue: %v", labelName, err)
@@ -343,9 +343,9 @@ func (s *EventListener) handleLabelCommand(r *http.Request, e *github.IssueComme
 		}
 		return
 	}
-	
+
 	log.Printf("handleLabelCommand: INF, @%s added label %q to issue #%d for project %q", actor, labelName, issueNumber, projectName)
-	
+
 	// Post confirmation comment
 	var comment string
 	if labelName == "fossa" {
@@ -353,7 +353,7 @@ func (s *EventListener) handleLabelCommand(r *http.Request, e *github.IssueComme
 	} else {
 		comment = fmt.Sprintf("@%s added the `snyk` label. This indicates the preference to use CNCF Snyk for license scanning.", actor)
 	}
-	
+
 	if err := s.updateIssue(r.Context(), owner, repo, issueNumber, comment); err != nil {
 		log.Printf("handleLabelCommand: WRN, failed to post confirmation comment: %v", err)
 	}

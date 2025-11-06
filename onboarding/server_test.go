@@ -279,8 +279,7 @@ func TestLabelCommand(t *testing.T) {
 		comments := mockGitHub.GetCreatedComments()
 		require.Len(t, comments, 1)
 		assert.Contains(t, comments[0].Body, "@unauthorized-user")
-		assert.Contains(t, comments[0].Body, "not authorized")
-		assert.Contains(t, comments[0].Body, "registered maintainers")
+		assert.Contains(t, comments[0].Body, "not yet been registered")
 	})
 
 	t.Run("invalid label name", func(t *testing.T) {

@@ -94,7 +94,12 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer source.Close()
+	defer func(source *os.File) {
+		err := source.Close()
+		if err != nil {
+			log.Printf("warning: failed to close file %s: %v", src, err)
+		}
+	}(source)
 
 	destination, err := os.Create(dst)
 	if err != nil {

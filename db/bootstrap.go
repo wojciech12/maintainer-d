@@ -100,8 +100,7 @@ func BootstrapSQLite(dbPath, spreadsheetID, worksheetCredentialsPath, fossaToken
 	return db, nil
 }
 
-// Reads the readRange data from spreadsheetID inserts it into db
-// The readRange from the worksheet MUST include the header row
+// Reads data from spreadsheetID inserts it into db.
 func loadMaintainersAndProjects(db *gorm.DB, spreadsheetID, credentialsPath string) error {
 	ctx := context.Background()
 
@@ -113,12 +112,14 @@ func loadMaintainersAndProjects(db *gorm.DB, spreadsheetID, credentialsPath stri
 
 	if err != nil {
 		log.Fatalf("maintainerd: backend: loadMaintainersAndProjects: unable to retrieve Sheets client: %v", err)
+		return err
 	}
 
 	rows, err := readSheetRows(ctx, srv, spreadsheetID)
 
 	if err != nil {
 		log.Fatalf("maintainerd-backend: loadMaintainersAndProjects - readSheetRows: %v", err)
+		return err
 	}
 
 	var currentMaintainerRef string
@@ -154,9 +155,15 @@ func loadMaintainersAndProjects(db *gorm.DB, spreadsheetID, credentialsPath stri
 		log.Printf("DEBUG, processing maintainer %s, missing fields %v \n", row[MaintainerNameHdr], missingMaintainerFields)
 		var parent model.Project
 		if parentName := row[ParentProjectHdr]; parentName != "" {
-			parent = model.Project{}
 			if err := db.Where("name = ?", parentName).
 				First(&parent).Error; err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					log.Printf("WARN, parent project '%s' not found for project '%s', importing without parent", parentName, row[ProjectHdr])
+				} else {
+					log.Printf("ERR, error looking up parent project '%s' for project '%s': %v", parentName, row[ProjectHdr], err)
+				}
+			} else {
+				log.Printf("INFO, project '%s' will be associated with parent project '%s' (ID: %d)", row[ProjectHdr], parentName, parent.ID)
 			}
 		}
 		currentMaintainerRef = row[MaintainerFileRefHdr]
@@ -181,11 +188,11 @@ func loadMaintainersAndProjects(db *gorm.DB, spreadsheetID, credentialsPath stri
 				}
 			}
 			if err := tx.FirstOrCreate(&project, model.Project{Name: project.Name}).Error; err != nil {
-				return fmt.Errorf("maintainerd-backend: loadMaintainersAndProjects - failed calling FirstOrCreate on project %v: error %v", project, err)
+				return fmt.Errorf("ERR, loadMaintainersAndProjects - failed calling FirstOrCreate on project %v: error %v", project, err)
 			}
 			company := model.Company{Name: company}
 			if err := tx.FirstOrCreate(&company, model.Company{Name: company.Name}).Error; err != nil {
-				return fmt.Errorf("maintainerd-backend: loadMaintainersAndProjects - failed calling FirstOrCreate on company %v: error %v", company, err)
+				return fmt.Errorf("ERR, loadMaintainersAndProjects - failed calling FirstOrCreate on company %v: error %v", company, err)
 			}
 			maintainer := model.Maintainer{
 				Name:             name,
@@ -196,14 +203,14 @@ func loadMaintainersAndProjects(db *gorm.DB, spreadsheetID, credentialsPath stri
 				MaintainerStatus: model.ActiveMaintainer,
 			}
 			if err := tx.FirstOrCreate(&maintainer, model.Maintainer{Email: maintainer.Email}).Error; err != nil {
-				return fmt.Errorf("maintainerd-backend: loadMaintainersAndProjects - failed calling FirstOrCreate on maintainer %v: error %v", maintainer, err)
+				return fmt.Errorf("ERR, loadMaintainersAndProjects - failed calling FirstOrCreate on maintainer %v: error %v", maintainer, err)
 			}
 			// Ensure the association (in case the maintainer existed already)
 			return tx.Model(&maintainer).
 				Association("Projects").
 				Append(&project)
 		}); err != nil {
-			log.Printf("TX not committed, row skipped %v : error %v ", row, err)
+			log.Printf("WARN, loadMaintainersAndProjects Database transaction not committed, row skipped %v : error %v ", row, err)
 		}
 	}
 	return nil
@@ -336,8 +343,10 @@ func CreateServiceTeamsForUser(
 	var teams []*model.ServiceTeam
 	var errMessages []string
 	s := NewSQLStore(db)
-	projects, _ := s.GetProjectMapByName()
-
+	projects, err := s.GetProjectMapByName()
+	if err != nil {
+		return nil, fmt.Errorf("CreateServiceTeamsForUser: GetProjectMapByName failed to get project map: %v", err)
+	}
 	for _, team := range teamUsers {
 		if project, ok := projects[team.Team.Name]; ok {
 			st := &model.ServiceTeam{
@@ -389,7 +398,7 @@ func MapFossaUserCollaborator(db *gorm.DB, email string, github string, user fos
 			Where("LOWER(git_hub_account) = ?", strings.ToLower(github)).
 			FirstOrCreate(&c).Error; err == nil {
 			return &c
-		} else if err != nil {
+		} else {
 			return nil
 		}
 	}
@@ -398,12 +407,10 @@ func MapFossaUserCollaborator(db *gorm.DB, email string, github string, user fos
 		Where("LOWER(email) = ?", strings.ToLower(email)).
 		FirstOrCreate(&c).Error; err == nil {
 		return &c
-	} else if err != nil {
+	} else {
 		log.Printf("mapFossaUserCollaborator: error creating collaborator: %s, %+v %v", email, c, err)
 		return nil
 	}
-
-	return &c
 }
 
 // MapFossaUserToMaintainer attempts to match a FOSSA user to a registered Maintainer.
@@ -526,7 +533,7 @@ func LinkServiceUserToTeam(
 }
 
 func FirstOrCreateServiceUser(db *gorm.DB, user fossa.User) (*model.ServiceUser, error) {
-	var fossaService = model.Service{Model: gorm.Model{ID: 1}, Name: "FOSSA"}
+	var fossaService = model.Service{Model: gorm.Model{ID: 1}}
 
 	var su model.ServiceUser
 

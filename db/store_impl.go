@@ -57,7 +57,7 @@ func (s *SQLStore) GetMaintainersByProject(projectID uint) ([]model.Maintainer, 
 		Preload("Maintainers.Company").
 		First(&project, projectID).Error
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrProjectNotFound
 		}
 		return nil, err
@@ -147,25 +147,15 @@ func (s *SQLStore) GetProjectMapByName() (map[string]model.Project, error) {
 	return projectsByName, nil
 }
 
-func (s *SQLStore) LogAuditEvent(logger *zap.SugaredLogger, event model.AuditLog) error {
+func (s *SQLStore) LogAuditEvent(logger *zap.SugaredLogger, event model.AuditLog) {
 	if event.Message == "" {
 		event.Message = event.Action
 	}
 
 	err := s.db.WithContext(context.Background()).Create(&event).Error
 	if err != nil {
-		logger.Errorf("failed to write audit log: %v", err)
-		return err
+		logger.Errorf("failed to write %v audit log: %v", event, err)
 	}
-
-	logger.Infow("audit log recorded",
-		"project_id", event.ProjectID,
-		"maintainer_id", event.MaintainerID,
-		"service_id", event.ServiceID,
-		"action", event.Action,
-		"message", event.Message,
-	)
-	return nil
 }
 
 // CreateServiceTeam creates or retrieves a service team entry in the database based on the provided project and service details.

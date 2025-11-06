@@ -44,17 +44,25 @@ func (m *MockGitHubTransport) RoundTrip(req *http.Request) (*http.Response, erro
 
 	// Capture comment creation
 	if req.Method == "POST" && strings.Contains(req.URL.Path, "/issues/") && strings.HasSuffix(req.URL.Path, "/comments") {
-		body, _ := io.ReadAll(req.Body)
+		body, err := io.ReadAll(req.Body)
+		if err != nil {
+			return nil, err
+		}
 		req.Body = io.NopCloser(bytes.NewReader(body))
 
 		var comment github.IssueComment
-		json.Unmarshal(body, &comment)
+		if json.Unmarshal(body, &comment) != nil {
+			return nil, err
+		}
 
 		// Parse owner, repo, issue number from URL
 		// URL format: /repos/{owner}/{repo}/issues/{issue_number}/comments
 		parts := strings.Split(req.URL.Path, "/")
 		if len(parts) >= 6 {
-			issueNum, _ := strconv.Atoi(parts[5])
+			issueNum, err := strconv.Atoi(parts[5])
+			if err != nil {
+				return nil, err
+			}
 			capture := GitHubCommentCapture{
 				Owner:       parts[2],
 				Repo:        parts[3],

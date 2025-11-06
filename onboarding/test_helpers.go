@@ -123,6 +123,8 @@ func stringPtr(s string) *string {
 // GitHub event helper functions
 
 // createIssueLabeledEvent creates a fake GitHub issue labeled event
+//
+//nolint:unparam
 func createIssueLabeledEvent(projectName, label string, issueNum int) *github.IssuesEvent {
 	return &github.IssuesEvent{
 		Action: github.String("labeled"),
@@ -171,6 +173,7 @@ func createIssueCommentEvent(projectName, body, author string, issueNum int, ass
 // TODO: This will be used when testing handleWebhook authorization logic.
 //
 //lint:ignore U1000 Reserved for future webhook handler tests
+//nolint:unparam
 func createWebhookRequest(t *testing.T, eventType string, payload []byte) *http.Request {
 	req, err := http.NewRequest("POST", "/webhook", nil)
 	require.NoError(t, err)

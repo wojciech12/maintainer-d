@@ -183,7 +183,7 @@ func (c *Client) SendUserInvitation(email string) error {
 	}(resp.Body)
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		var fossaErr FossaError
+		var fossaErr Error
 		if err := json.Unmarshal(body, &fossaErr); err != nil {
 			return fmt.Errorf("SendUserInvitation calling json.Unmarshal failed for %s: %s\n\t\t%s", email, resp.Status, string(body))
 		}
@@ -332,7 +332,7 @@ func (c *Client) AddUserToTeamByEmail(teamID int, email string, roleID int) erro
 	}
 
 	// Attempt to decode known FOSSA error schema
-	var fossaErr FossaError
+	var fossaErr Error
 	if err := json.Unmarshal(body, &fossaErr); err == nil {
 		switch fossaErr.Code {
 		case ErrCodeUserAlreadyMember:
@@ -456,7 +456,7 @@ func (c *Client) CreateTeam(name string) (*Team, error) {
 	}
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		var fossaErr FossaError
+		var fossaErr Error
 		if err := json.Unmarshal(body, &fossaErr); err == nil {
 			switch fossaErr.Code {
 			case 2003:
@@ -626,7 +626,7 @@ type ImportedProjects struct {
 	TotalCount int `json:"totalCount"`
 }
 
-type FossaError struct {
+type Error struct {
 	UUID           string `json:"uuid"`
 	Code           int    `json:"code"`
 	Message        string `json:"message"`

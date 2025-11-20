@@ -22,6 +22,8 @@ type MockFossaClient struct {
 	invitationsSent []string
 	teamsCreated    []string
 	membersAdded    map[int][]string // teamID -> emails added
+
+	createTeamErr error
 }
 
 // NewMockFossaClient creates a new mock FOSSA client
@@ -43,6 +45,10 @@ func NewMockFossaClient() *MockFossaClient {
 func (m *MockFossaClient) CreateTeam(name string) (*fossa.Team, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	if m.createTeamErr != nil {
+		return nil, m.createTeamErr
+	}
 
 	if _, exists := m.teams[name]; exists {
 		return nil, fossa.ErrTeamAlreadyExists
@@ -239,4 +245,12 @@ func (m *MockFossaClient) Reset() {
 	m.teamsCreated = nil
 	m.membersAdded = make(map[int][]string)
 	m.importedRepos = make(map[int]fossa.ImportedProjects)
+	m.createTeamErr = nil
+}
+
+// SetCreateTeamError configures the mock to fail team creation requests.
+func (m *MockFossaClient) SetCreateTeamError(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.createTeamErr = err
 }

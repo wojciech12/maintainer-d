@@ -1,6 +1,7 @@
 package onboarding
 
 import (
+	"errors"
 	"net/http"
 	"testing"
 
@@ -163,11 +164,11 @@ func TestFossaChosen_Basic(t *testing.T) {
 		// Execute
 		server.fossaChosen(project.Name, req, issueEvent)
 
-		// Verify GitHub comment mentions pending invitation
+		// Verify GitHub comment includes aggregated invitation summary
 		comments := mockGitHub.GetCreatedComments()
 		require.Len(t, comments, 1)
 		assert.Contains(t, comments[0].Body, "@alice")
-		assert.Contains(t, comments[0].Body, "pending invitation")
+		assert.Contains(t, comments[0].Body, "Invitation(s) to join CNCF FOSSA sent to")
 	})
 
 	t.Run("maintainer already exists in FOSSA", func(t *testing.T) {
@@ -188,11 +189,31 @@ func TestFossaChosen_Basic(t *testing.T) {
 		// Execute
 		server.fossaChosen(project.Name, req, issueEvent)
 
-		// Verify GitHub comment mentions user is already member
+		// Verify GitHub comment mentions aggregated existing member info
 		comments := mockGitHub.GetCreatedComments()
 		require.Len(t, comments, 1)
 		assert.Contains(t, comments[0].Body, "@alice")
-		assert.Contains(t, comments[0].Body, "CNCF FOSSA User")
+		assert.Contains(t, comments[0].Body, "CNCF FOSSA Users added to the team as Team Admins")
+	})
+}
+
+func TestSignProjectUpForFOSSA_CreateTeamFailure(t *testing.T) {
+	db := setupTestDB(t)
+	project, maintainers := seedProjectData(t, db)
+
+	mockFossa := NewMockFossaClient()
+	mockFossa.SetCreateTeamError(errors.New("boom"))
+
+	for _, maintainer := range maintainers {
+		mockFossa.SetUserExists(maintainer.Email, true)
+	}
+
+	mockGitHub := NewMockGitHubTransport()
+	server := createTestServer(t, db, mockFossa, mockGitHub)
+
+	assert.NotPanics(t, func() {
+		_, err := server.signProjectUpForFOSSA(project)
+		assert.Error(t, err)
 	})
 }
 

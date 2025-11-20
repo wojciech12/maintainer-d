@@ -1,0 +1,237 @@
+# Deployment notes
+
+MaintainerD - input data (List of Projects and associated Maintainers) 
+
+## Kubernetes resources overview
+```mermaid
+graph RL
+    subgraph maintainerd["Namespace: maintainerd"]
+        subgraph pod["Pod"]
+            subgraph initContainerBootstrap["initContainer: bootstrap"]
+                bootstrap["Loads Project → Maintainer data <br>into sqlite3 database<br>from CNCF-Internal Google Sheet"]
+            end
+            subgraph maintainerdServer["maintainerd-server"]
+                server["<br>GitHub WebHooks<br>labels can start on-boarding processes<br>issue comments can progress workflows<br>/healthz establishes availability by maintainerd-service."]
+            end
+        end
+
+        pvc[(PersistentVolumeClaim<br/>sqlite3 maintainerd-db)]
+        svc{{Service<br/>maintainerd-service<br/>type=LoadBalancer}}
+        svc -->|"ports 80/443"| ext[(External LB IP<br/>github-events.cncf.io/webhook)]
+    end
+
+    bootstrap -->|"SQL INSERTs into PROJECT and MAINTAINERS tables"| pvc
+```
+
+
+    deploy -->|creates| pod
+    deploy -->|mounts| pvc
+    deploy -->|envFrom| secrets
+    deploy -->|imagePullSecrets| ghcr
+    pod -->|exposes 2525| svc
+    svc -->|TLS| tls
+    pod -->|volumeMount| pvc
+
+
+
+
+## Maintainer Database ER diagram
+
+```mermaid
+erDiagram
+companies {
+INTEGER id PK
+DATETIME created_at
+DATETIME updated_at
+DATETIME deleted_at
+TEXT name
+}
+
+    projects {
+        INTEGER id PK
+        DATETIME created_at
+        DATETIME updated_at
+        DATETIME deleted_at
+        TEXT name
+        INTEGER parent_project_id "FK to projects.id"
+        TEXT maturity
+        TEXT maintainer_ref
+        TEXT onboarding_issue
+        TEXT mailing_list
+    }
+
+    services {
+        INTEGER id PK
+        DATETIME created_at
+        DATETIME updated_at
+        DATETIME deleted_at
+        TEXT name
+        TEXT description
+    }
+
+    service_projects {
+        INTEGER project_id PK "FK to projects.id"
+        INTEGER service_id PK  "FK to services.id"
+    }
+
+    maintainers {
+        INTEGER id PK
+        DATETIME created_at
+        DATETIME updated_at
+        DATETIME deleted_at
+        TEXT name
+        TEXT email
+        TEXT git_hub_account
+        TEXT git_hub_email
+        TEXT maintainer_status
+        TEXT import_warnings
+        DATETIME registered_at
+        INTEGER company_id "FK to companies.id"
+    }
+
+    maintainer_projects {
+        INTEGER maintainer_id PK "FK to maintainers.id"
+        INTEGER project_id PK     "FK to projects.id"
+        DATETIME joined_at
+    }
+
+    collaborators {
+        INTEGER id PK
+        DATETIME created_at
+        DATETIME updated_at
+        DATETIME deleted_at
+        TEXT name
+        TEXT email
+        TEXT git_hub_email
+        TEXT git_hub_account
+        DATETIME last_login
+        DATETIME registered_at
+    }
+
+    service_teams {
+        INTEGER id PK
+        DATETIME created_at
+        DATETIME updated_at
+        DATETIME deleted_at
+        INTEGER project_id      "FK to projects.id"
+        INTEGER service_id      "FK to services.id"
+        TEXT service_team_name
+        TEXT project_name
+    }
+
+    service_users {
+        INTEGER id PK
+        DATETIME created_at
+        DATETIME updated_at
+        DATETIME deleted_at
+        INTEGER service_id       "FK to services.id"
+        INTEGER service_user_id
+        TEXT service_email
+        TEXT service_ref
+        TEXT service_git_hub_name
+    }
+
+    service_user_teams {
+        INTEGER id PK
+        DATETIME created_at
+        DATETIME updated_at
+        DATETIME deleted_at
+        INTEGER service_id       "FK to services.id"
+        INTEGER service_user_id  "FK to service_users.id"
+        INTEGER service_team_id  "FK to service_teams.id"
+        INTEGER maintainer_id    "FK to maintainers.id"
+        INTEGER collaborator_id  "FK to collaborators.id"
+    }
+
+    companies             ||--o{ maintainers          : employs
+    projects              ||--o{ projects             : parent_of
+    projects              ||--o{ service_projects     : includes
+    services              ||--o{ service_projects     : provides
+    maintainers           ||--o{ maintainer_projects  : assigned_to
+    projects              ||--o{ maintainer_projects  : hosts
+    service_teams         ||--o{ service_user_teams   : has
+    services              ||--o{ service_users        : has
+```
+
+
+
+## init-container
+ - bootstrap process loads project and maintainer data from 
+   - a CNCF-Internal worksheet 
+   - in future, should be loaded from a combination of PCC user profiles (keyed by GitHub user account) and a registered list of project.yaml files on a per-project basis. 
+
+## GitHub Event Listener
+
+### cert-manager
+Manages the server cert associated with the maintainer-d event listener that listens for changes to onboarding issues.
+
+Steps to integrate with Let's Encrypt on OKE:
+
+1. Create the OCI DNS credentials secret:
+   ```bash
+   kubectl create secret generic oci-dns-credentials -n cert-manager \
+     --from-literal=tenancyOCID=<tenancy_ocid> \
+     --from-literal=userOCID=<user_ocid> \
+     --from-literal=fingerprint=<api_key_fingerprint> \
+     --from-file=privateKey=<path_to_api_key_private_key_pem>
+   ```
+2. Apply a `ClusterIssuer` using the OCI DNS solver (update compartment OCID, DNS zone, and email):
+   ```yaml
+   apiVersion: cert-manager.io/v1
+   kind: ClusterIssuer
+   metadata:
+     name: letsencrypt-dns
+   spec:
+     acme:
+       email: you@example.com
+       server: https://acme-v02.api.letsencrypt.org/directory
+       privateKeySecretRef:
+         name: letsencrypt-dns-account-key
+       solvers:
+       - dns01:
+           oci:
+             compartmentOCID: ocid1.compartment.oc1..aaaaaaaa22icap66vxktktubjlhf6oxvfhev6n7udgje2chahyrtq65ga63a
+             dnsZoneName: cncf.io.
+             secretRef:
+               name: oci-dns-credentials
+               key: privateKey
+             tenancyOCID: ocid1.tenancy.oc1...            # must match the secret
+             userOCID: ocid1.user.oc1...                  # must match the secret
+             fingerprint: <api_key_fingerprint>
+   ```
+3. Request the certificate in the `maintainerd` namespace:
+   ```yaml
+   apiVersion: cert-manager.io/v1
+   kind: Certificate
+   metadata:
+     name: maintainerd-cert
+     namespace: maintainerd
+   spec:
+     secretName: maintainerd-tls
+     issuerRef:
+       name: letsencrypt-dns
+       kind: ClusterIssuer
+     dnsNames:
+     - github-events.cncf.io
+   ```
+4. Update `deploy/manifests/service.yaml` to expose HTTPS and reference the secret:
+   ```yaml
+   metadata:
+     annotations:
+       service.beta.kubernetes.io/oci-load-balancer-ssl-ports: https
+       service.beta.kubernetes.io/oci-load-balancer-tls-secret: maintainerd/maintainerd-tls
+   spec:
+     ports:
+     - name: http
+       port: 80
+       targetPort: 2525
+     - name: https
+       port: 443
+       targetPort: 2525
+   ```
+5. Apply the manifests (`kubectl apply -f deploy/manifests/service.yaml`) and verify:
+   - `kubectl describe certificate maintainerd-cert -n maintainerd`
+   - `kubectl get secret maintainerd-tls -n maintainerd`
+   - `curl -vk https://github-events.cncf.io/healthz`
+
+Ensure your OCI IAM policies allow the OKE dynamic group to manage DNS records in the relevant compartment; otherwise the ACME solver cannot create the TXT challenges.

@@ -80,7 +80,7 @@ func (s *SQLStore) GetServiceTeamByProject(projectID, serviceID uint) (*model.Se
 // GetMaintainerMapByEmail returns a map of Maintainers keyed by email address
 func (s *SQLStore) GetMaintainerMapByEmail() (map[string]model.Maintainer, error) {
 	var maintainers []model.Maintainer
-	err := s.db.Find(&maintainers).Error
+	err := s.db.Preload("Company").Find(&maintainers).Error
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +94,7 @@ func (s *SQLStore) GetMaintainerMapByEmail() (map[string]model.Maintainer, error
 // GetMaintainerMapByGitHubAccount returns a map of Maintainers keyed by GitHub Account
 func (s *SQLStore) GetMaintainerMapByGitHubAccount() (map[string]model.Maintainer, error) {
 	var maintainers []model.Maintainer
-	err := s.db.Find(&maintainers).Error
+	err := s.db.Preload("Company").Find(&maintainers).Error
 	if err != nil {
 		return nil, err
 	}
@@ -180,4 +180,13 @@ func (s *SQLStore) CreateServiceTeam(
 		return nil, fmt.Errorf("CreateServiceTeamsForUser had partial errors:\n%s", strings.Join(errMessages, "\n"))
 	}
 	return st, nil
+}
+
+// ListCompanies returns all companies in the database.
+func (s *SQLStore) ListCompanies() ([]model.Company, error) {
+	var companies []model.Company
+	if err := s.db.Find(&companies).Error; err != nil {
+		return nil, err
+	}
+	return companies, nil
 }

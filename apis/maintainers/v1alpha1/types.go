@@ -386,6 +386,7 @@ type ServiceUserTeam struct {
 	Status ServiceUserTeamStatus `json:"status,omitempty"`
 }
 
+// +kubebuilder:object:root=true
 // ServiceUserTeamList is a list of ServiceUserTeam resources.
 type ServiceUserTeamList struct {
 	metav1.TypeMeta `json:",inline"`

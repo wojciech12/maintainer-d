@@ -24,7 +24,8 @@ APIGEN ?= $(APIGEN_BIN)
 GOCACHE_DIR ?= $(TOPDIR)/.gocache
 KCP_CRD_DIR ?= $(TOPDIR)/config/crd/bases
 KCP_SCHEMA_DIR ?= $(TOPDIR)/config/kcp
-KCP_RESOURCES := collaborators companies maintainers onboardingtasks projectmemberships projects services serviceteams serviceusers serviceuserteams
+KCP_RESOURCES := $(shell ls $(KCP_CRD_DIR)/maintainer-d.cncf.io_*.yaml 2>/dev/null | sed -E 's@.*/maintainer-d\.cncf\.io_([^.]*)\.yaml@\1@')
+GOFMT_PATHS ?= $(shell go list -f '{{.Dir}}' ./...)
 
 # GHCR auth (optional for push). If set, we will docker login before push.
 GHCR_USER  ?= $(DOCKER_REGISTRY_USERNAME)
@@ -33,10 +34,13 @@ GHCR_TOKEN ?= $(GITHUB_GHCR_TOKEN)
 
 
 # ---- Image ----
-.PHONY: image
-image:
+.PHONY: image-build
+image-build:
 	@echo "Building container image: $(IMAGE)"
 	@docker buildx build -t $(IMAGE) -f Dockerfile .
+
+.PHONY: image-push
+image-push: image-build
 	@echo "Ensuring docker is logged in to $(REGISTRY) (uses GHCR_TOKEN if set)"
 	@if [ -n "$(GHCR_TOKEN)" ]; then \
 		echo "Logging into $(REGISTRY) as $(GHCR_USER) using token from GHCR_TOKEN"; \
@@ -46,6 +50,9 @@ image:
 	fi
 	@echo "Pushing image: $(IMAGE)"
 	@docker push $(IMAGE)
+
+.PHONY: image-deploy
+image-deploy: image-push
 	@echo "Image pushed. Attempting rollout on context $(CTX_STR)."
 	@CTX_FLAG="$(if $(KUBECONTEXT),--context $(KUBECONTEXT))" ; \
 	if kubectl $$CTX_FLAG config current-context >/dev/null 2>&1; then \
@@ -59,8 +66,8 @@ image:
 		echo "kubectl context $(CTX_STR) unavailable; skipping rollout"; \
 	fi
 
-.PHONY: image-push
-image-push: image
+.PHONY: image
+image: image-build
 	@true
 
 .PHONY: image-run
@@ -71,7 +78,7 @@ image-run: image
 NAMESPACE ?= maintainerd
 ENVSRC    ?= .envrc
 ENVOUT    ?= bootstrap.env
-KUBECONTEXT ?=context-cdv2c4jfn5q
+KUBECONTEXT ?=
 
 
 # Secret names (keep these stable across clusters)
@@ -106,8 +113,9 @@ help:
 	@echo "make apply-creds     -> create/update $(CREDS_SECRET_NAME) from $(CREDS_FILE)"
 	@echo "make clean-env       -> remove $(ENVOUT)"
 	@echo "make print           -> show which keys would be loaded (without values)"
-	@echo "make image           -> build+push $(IMAGE), then restart Deployment in $(NAMESPACE)"
-	@echo "                      (uses GHCR_TOKEN/GITHUB_GHCR_TOKEN + GHCR_USER/DOCKER_REGISTRY_USERNAME for ghcr login)"
+	@echo "make image-build     -> build container image $(IMAGE) locally"
+	@echo "make image-push      -> build and push $(IMAGE) (uses GHCR_TOKEN/GITHUB_GHCR_TOKEN + GHCR_USER/DOCKER_REGISTRY_USERNAME for ghcr login)"
+	@echo "make image-deploy    -> build, push, and restart Deployment in $(NAMESPACE)"
 	@echo "make ensure-ns       -> ensure namespace $(NAMESPACE) exists"
 	@echo "make apply-ghcr-secret -> create/update docker-registry Secret 'ghcr-secret'"
 	@echo "make manifests-apply -> kubectl apply -f deploy/manifests (prod-only)"
@@ -308,25 +316,19 @@ ci-local:
 	@echo "→ Verifying dependencies..."
 	@go mod verify
 	@echo "→ Running go fmt..."
-	@if [ "$$(gofmt -s -l . | wc -l)" -gt 0 ]; then \
+	@if [ "$$(gofmt -s -l $(GOFMT_PATHS) | wc -l)" -gt 0 ]; then \
 		echo "❌ Code needs formatting. Run: go fmt ./..."; \
-		gofmt -s -l .; \
+		gofmt -s -l $(GOFMT_PATHS); \
 		exit 1; \
 	fi
 	@echo "→ Running go vet..."
 	@go vet ./...
 	@echo "→ Running staticcheck..."
-	@if command -v staticcheck >/dev/null 2>&1; then \
-		staticcheck ./...; \
-	else \
-		echo "⚠️  staticcheck not installed. Run: go install honnef.co/go/tools/cmd/staticcheck@latest"; \
-	fi
+	@command -v staticcheck >/dev/null 2>&1 || { echo "staticcheck not installed. Run: go install honnef.co/go/tools/cmd/staticcheck@latest"; exit 1; }
+	@staticcheck ./...
 	@echo "→ Running golangci-lint..."
-	@if command -v golangci-lint >/dev/null 2>&1; then \
-		golangci-lint run ./...; \
-	else \
-		echo "⚠️  golangci-lint not installed. Run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest"; \
-	fi
+	@command -v golangci-lint >/dev/null 2>&1 || { echo "golangci-lint not installed. Run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest"; exit 1; }
+	@golangci-lint run ./...
 	@echo "→ Running tests with race detector..."
 	@go test -race -coverprofile=coverage.out -covermode=atomic ./...
 	@echo "→ Coverage report:"

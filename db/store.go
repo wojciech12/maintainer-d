@@ -20,4 +20,5 @@ type Store interface {
 	LogAuditEvent(logger *zap.SugaredLogger, event model.AuditLog) error
 	GetMaintainerMapByGitHubAccount() (map[string]model.Maintainer, error)
 	CreateServiceTeamForUser(interface{ any }) (*model.ServiceTeam, error)
+	ListCompanies() ([]model.Company, error)
 }

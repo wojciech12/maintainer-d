@@ -24,12 +24,6 @@ var SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
 // AddToScheme adds the types in this group-version to the given scheme.
 var AddToScheme = SchemeBuilder.AddToScheme
 
-// addKnownTypes adds the set of types defined in this package to the supplied scheme.
-func addKnownTypes(scheme *runtime.Scheme) error {
-	scheme.AddKnownTypes(SchemeGroupVersion)
-	return nil
-}
-
 // Resource takes an unqualified resource and returns a Group qualified GroupResource.
 func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()

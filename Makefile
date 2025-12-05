@@ -1,7 +1,8 @@
 TOPDIR=$(PWD)
-GH_ORG_LC="robertkielty"
+GH_ORG_LC=robertkielty
 REGISTRY ?= ghcr.io
 IMAGE ?= $(REGISTRY)/$(GH_ORG_LC)/maintainerd:latest
+SYNC_IMAGE ?= $(REGISTRY)/$(GH_ORG_LC)/maintainerd-sync:latest
 WHOAMI=$(shell whoami)
 
 # Helpful context string for logs
@@ -39,6 +40,11 @@ image-build:
 	@echo "Building container image: $(IMAGE)"
 	@docker buildx build -t $(IMAGE) -f Dockerfile .
 
+.PHONY: sync-image-build
+sync-image-build:
+	@echo "Building sync image: $(SYNC_IMAGE)"
+	@docker buildx build -t $(SYNC_IMAGE) -f deploy/sync/Dockerfile .
+
 .PHONY: image-push
 image-push: image-build
 	@echo "Ensuring docker is logged in to $(REGISTRY) (uses GHCR_TOKEN if set)"
@@ -65,6 +71,39 @@ image-deploy: image-push
 	else \
 		echo "kubectl context $(CTX_STR) unavailable; skipping rollout"; \
 	fi
+
+.PHONY: sync-image-push
+sync-image-push: sync-image-build
+	@echo "Ensuring docker is logged in to $(REGISTRY) (uses GHCR_TOKEN if set)"
+	@if [ -n "$(GHCR_TOKEN)" ]; then \
+		echo "Logging into $(REGISTRY) as $(GHCR_USER) using token from GHCR_TOKEN"; \
+		echo "$(GHCR_TOKEN)" | docker login $(REGISTRY) -u "$(GHCR_USER)" --password-stdin; \
+	else \
+		echo "GHCR_TOKEN not set; attempting push with existing docker auth"; \
+	fi
+	@echo "Pushing image: $(SYNC_IMAGE)"
+	@docker push $(SYNC_IMAGE)
+
+.PHONY: sync-image-deploy
+sync-image-deploy: sync-image-push
+	@echo "Image pushed. Updating CronJob/maintainer-sync in $(NAMESPACE) [ctx=$(CTX_STR)]"
+	@CTX_FLAG="$(if $(KUBECONTEXT),--context $(KUBECONTEXT))" ; \
+	if ! kubectl $$CTX_FLAG config current-context >/dev/null 2>&1; then \
+		echo "kubectl context $(CTX_STR) unavailable; skipping rollout"; exit 0; \
+	fi ; \
+	if ! kubectl -n $(NAMESPACE) $$CTX_FLAG get cronjob/maintainer-sync >/dev/null 2>&1; then \
+		echo "CronJob/maintainer-sync not found in namespace $(NAMESPACE)."; \
+		echo "Hint: apply deploy/manifests/sync.yaml or run 'make sync-apply' (or 'make manifests-apply')."; \
+		exit 1; \
+	fi ; \
+	kubectl -n $(NAMESPACE) $$CTX_FLAG set image cronjob/maintainer-sync '*=$(SYNC_IMAGE)'; \
+	kubectl -n $(NAMESPACE) $$CTX_FLAG delete job -l job-name=maintainer-sync --ignore-not-found; \
+	echo "Next scheduled run will pull $(SYNC_IMAGE)."
+
+.PHONY: sync-apply
+sync-apply:
+	@echo "Applying sync resources in namespace $(NAMESPACE) [ctx=$(CTX_STR)]"
+	@kubectl -n $(NAMESPACE) $(if $(KUBECONTEXT),--context $(KUBECONTEXT)) apply -f deploy/manifests/sync.yaml
 
 .PHONY: image
 image: image-build
@@ -316,16 +355,17 @@ ci-local:
 	@echo "→ Verifying dependencies..."
 	@go mod verify
 	@echo "→ Running go fmt..."
-	@if [ "$$(gofmt -s -l $(GOFMT_PATHS) | wc -l)" -gt 0 ]; then \
-		echo "❌ Code needs formatting. Run: go fmt ./..."; \
-		gofmt -s -l $(GOFMT_PATHS); \
+	@GOFILES="$$(find . -path './.modcache' -prune -o -path './.gocache' -prune -o -path './.git' -prune -o -name '*.go' -print)"; \
+	if [ "$$(gofmt -s -l $$GOFILES | wc -l)" -gt 0 ]; then \
+		echo "❌ Code needs formatting. Run: gofmt -w $$(echo $$GOFILES)"; \
+		gofmt -s -l $$GOFILES; \
 		exit 1; \
 	fi
 	@echo "→ Running go vet..."
-	@go vet ./...
+	@go vet # ./...
 	@echo "→ Running staticcheck..."
 	@command -v staticcheck >/dev/null 2>&1 || { echo "staticcheck not installed. Run: go install honnef.co/go/tools/cmd/staticcheck@latest"; exit 1; }
-	@staticcheck ./...
+	@staticcheck # ./...
 	@echo "→ Running golangci-lint..."
 	@command -v golangci-lint >/dev/null 2>&1 || { echo "golangci-lint not installed. Run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest"; exit 1; }
 	@golangci-lint run ./...

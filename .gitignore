@@ -9,4 +9,5 @@ demo.db
 .dirlocals.el
 ./db/db
 .gocache/
+.modcache/
 coverage.out

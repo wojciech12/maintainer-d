@@ -23,7 +23,7 @@ We will operate Workspaces (`ws`) of type `kdp-organization`.
 
    ```bash
    unset KUBECONFIG
-   kubectx context-cdv4jfn5q
+   kubectx context-cdv2c4jfn5q
    ```
 
 2. Read the CRDs:
@@ -38,3 +38,14 @@ We will operate Workspaces (`ws`) of type `kdp-organization`.
    ```bash
    kubectl get projects.maintainer-d.cncf.io -n maintainerd
    ```
+
+## Validation Results
+
+See [VALIDATION.md](./VALIDATION.md) for detailed validation results from testing against real Project CRDs.
+
+**Key Findings**:
+- ✅ All 249 project names are DNS-1123 compliant
+- ✅ No existing status.conditions on any project
+- ✅ No existing annotations on any project
+- ✅ All projects are in `maintainerd` namespace
+- ✅ Controller implementation is validated and ready

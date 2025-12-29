@@ -109,43 +109,13 @@ kubectl create serviceaccount kdp-workspaces-operator -n kdp-workspaces-sa
 Create a ClusterRole with workspace management permissions:
 
 ```bash
-kubectl apply -f - <<EOF
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: kdp-workspaces-manager
-rules:
-  # Workspace management permissions
-  - apiGroups: ["tenancy.kcp.io"]
-    resources: ["workspaces"]
-    verbs: ["get", "list", "watch", "create", "update", "patch"]
-  - apiGroups: ["tenancy.kcp.io"]
-    resources: ["workspaces/status"]
-    verbs: ["get", "list", "watch"]
-  # Workspace type permissions
-  - apiGroups: ["tenancy.kcp.io"]
-    resources: ["workspacetypes"]
-    verbs: ["get", "list"]
-EOF
+kubectl apply -f kdp/clusterrole.yaml
 ```
 
 Bind the ClusterRole to the ServiceAccount:
 
 ```bash
-kubectl apply -f - <<EOF
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: kdp-workspaces-operator-workspaces-manager
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: kdp-workspaces-manager
-subjects:
-  - kind: ServiceAccount
-    name: kdp-workspaces-operator
-    namespace: kdp-workspaces-sa
-EOF
+kubectl apply -f kdp/clusterrolebinding.yaml
 ```
 
 ### Step 3: Create Service Account Token
@@ -153,16 +123,7 @@ EOF
 For Kubernetes 1.24+, create a Secret to obtain a long-lived token:
 
 ```bash
-kubectl apply -f - <<EOF
-apiVersion: v1
-kind: Secret
-metadata:
-  name: kdp-workspaces-operator-token
-  namespace: kdp-workspaces-sa
-  annotations:
-    kubernetes.io/service-account.name: kdp-workspaces-operator
-type: kubernetes.io/service-account-token
-EOF
+kubectl apply -f kdp/secret-token.yaml
 ```
 
 Wait a few seconds, then extract the token and CA certificate:

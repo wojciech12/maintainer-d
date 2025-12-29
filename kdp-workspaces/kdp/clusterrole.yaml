@@ -1,0 +1,16 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kdp-workspaces-manager
+rules:
+  # Workspace management permissions
+  - apiGroups: ["tenancy.kcp.io"]
+    resources: ["workspaces"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  - apiGroups: ["tenancy.kcp.io"]
+    resources: ["workspaces/status"]
+    verbs: ["get", "list", "watch"]
+  # Workspace type permissions
+  - apiGroups: ["tenancy.kcp.io"]
+    resources: ["workspacetypes"]
+    verbs: ["get", "list"]

@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kdp-workspace-system
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kdp-workspace-config
+  namespace: kdp-workspace-system
+data:
+  # KCP API URL (optional - can be overridden in kubeconfig)
+  kcp-url: ""
+  # Workspace path in kcp (default: root)
+  kcp-workspace-path: "root"
+  # Workspace type to create (default: kdp-organization)
+  workspace-type: "kdp-organization"

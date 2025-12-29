@@ -34,6 +34,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+
+	"github.com/cncf/maintainer-d/kdp-workspaces/internal/controller"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -58,6 +60,12 @@ func main() {
 	var secureMetrics bool
 	var enableHTTP2 bool
 	var tlsOpts []func(*tls.Config)
+	// KCP configuration flags
+	var kcpConfigMapName string
+	var kcpConfigMapNamespace string
+	var kcpSecretName string
+	var kcpSecretNamespace string
+	var workspaceType string
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -75,6 +83,17 @@ func main() {
 	flag.StringVar(&metricsCertKey, "metrics-cert-key", "tls.key", "The name of the metrics server key file.")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
+	// KCP configuration flags
+	flag.StringVar(&kcpConfigMapName, "kcp-configmap-name", "kdp-workspace-config",
+		"Name of the ConfigMap containing kcp configuration")
+	flag.StringVar(&kcpConfigMapNamespace, "kcp-configmap-namespace", "kdp-workspace-system",
+		"Namespace of the ConfigMap containing kcp configuration")
+	flag.StringVar(&kcpSecretName, "kcp-secret-name", "kdp-workspace-kubeconfig",
+		"Name of the Secret containing kcp kubeconfig")
+	flag.StringVar(&kcpSecretNamespace, "kcp-secret-namespace", "kdp-workspace-system",
+		"Namespace of the Secret containing kcp kubeconfig")
+	flag.StringVar(&workspaceType, "workspace-type", "kdp-organization",
+		"The workspace type to create in kcp")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -174,6 +193,19 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Setup Project controller
+	if err = (&controller.ProjectReconciler{
+		Client:                mgr.GetClient(),
+		Scheme:                mgr.GetScheme(),
+		KCPConfigMapName:      kcpConfigMapName,
+		KCPConfigMapNamespace: kcpConfigMapNamespace,
+		KCPSecretName:         kcpSecretName,
+		KCPSecretNamespace:    kcpSecretNamespace,
+		WorkspaceType:         workspaceType,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Project")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

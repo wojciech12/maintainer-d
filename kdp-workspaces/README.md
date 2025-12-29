@@ -109,13 +109,13 @@ kubectl create serviceaccount kdp-workspaces-operator -n kdp-workspaces-sa
 Create a ClusterRole with workspace management permissions:
 
 ```bash
-kubectl apply -f kdp/clusterrole.yaml
+kubectl apply -f config/kdp/clusterrole.yaml
 ```
 
 Bind the ClusterRole to the ServiceAccount:
 
 ```bash
-kubectl apply -f kdp/clusterrolebinding.yaml
+kubectl apply -f config/kdp/clusterrolebinding.yaml
 ```
 
 ### Step 3: Create Service Account Token
@@ -123,7 +123,7 @@ kubectl apply -f kdp/clusterrolebinding.yaml
 For Kubernetes 1.24+, create a Secret to obtain a long-lived token:
 
 ```bash
-kubectl apply -f kdp/secret-token.yaml
+kubectl apply -f config/kdp/secret-token.yaml
 ```
 
 Wait a few seconds, then extract the token and CA certificate:
@@ -149,25 +149,12 @@ echo "KDP SERVER: ${KDP_SERVER}"
 Create a kubeconfig file using the service account credentials:
 
 ```bash
-cat > kdp-workspaces-operator-kubeconfig.yaml <<EOF
-apiVersion: v1
-kind: Config
-clusters:
-  - name: kdp
-    cluster:
-      certificate-authority-data: ${CA_CERT}
-      server: ${KDP_SERVER}
-contexts:
-  - name: kdp
-    context:
-      cluster: kdp
-      user: kdp-workspaces-operator
-current-context: kdp
-users:
-  - name: kdp-workspaces-operator
-    user:
-      token: ${TOKEN}
-EOF
+export KDP_SERVER="${KDP_SERVER}"
+export CA_CERT="${CA_CERT}"
+export TOKEN="${TOKEN}"
+
+# Generate kubeconfig from template
+envsubst < config/kdp/kubeconfig-template.yaml > kdp-workspaces-operator-kubeconfig.yaml
 ```
 
 ### Step 5: Verify Service Account Access

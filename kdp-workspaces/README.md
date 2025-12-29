@@ -130,15 +130,18 @@ Wait a few seconds, then extract the token and CA certificate:
 
 ```bash
 # Extract token
-TOKEN=$(kubectl get secret kdp-workspaces-operator-token -n kdp-workspace-sa \
+TOKEN=$(kubectl get secret kdp-workspaces-operator-token -n kdp-workspaces-sa \
   -o jsonpath='{.data.token}' | base64 -d)
 
 # Extract CA certificate
-CA_CERT=$(kubectl get secret kdp-workspaces-operator-token -n kdp-workspace-sa \
+CA_CERT=$(kubectl get secret kdp-workspaces-operator-token -n kdp-workspaces-sa \
   -o jsonpath='{.data.ca\.crt}')
+
+KDP_SERVER=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')
 
 # Verify token exists
 echo "Token length: ${#TOKEN}"
+echo "KDP SERVER: ${KDP_SERVER}"
 ```
 
 ### Step 4: Create Kubeconfig for the Operator
@@ -146,10 +149,7 @@ echo "Token length: ${#TOKEN}"
 Create a kubeconfig file using the service account credentials:
 
 ```bash
-# Replace with your actual KDP API server URL
-KDP_SERVER="https://your-kdp-api-server:8443/clusters/root"
-
-cat > kdp-workspace-operator-kubeconfig.yaml <<EOF
+cat > kdp-workspaces-operator-kubeconfig.yaml <<EOF
 apiVersion: v1
 kind: Config
 clusters:
@@ -161,10 +161,10 @@ contexts:
   - name: kdp
     context:
       cluster: kdp
-      user: kdp-workspace-operator
+      user: kdp-workspaces-operator
 current-context: kdp
 users:
-  - name: kdp-workspace-operator
+  - name: kdp-workspaces-operator
     user:
       token: ${TOKEN}
 EOF
@@ -199,12 +199,11 @@ kubectl get workspace test-sa-verification
 kubectl delete workspace test-sa-verification
 ```
 
-### Step 6: Configure the Operator
+### Step 6: Configure the Operator (Service Cluster)
 
 Create the Secret and ConfigMap in your Kubernetes cluster:
 
 ```bash
-# Switch to your local Kubernetes cluster
 export KUBECONFIG=~/.kube/config
 
 # Create namespace

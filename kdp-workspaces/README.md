@@ -197,28 +197,28 @@ export KUBECONFIG=~/.kube/config
 kubectl create namespace kdp-workspaces-system
 
 # Create Secret with the operator kubeconfig
-kubectl create secret generic kdp-workspace-kubeconfig \
-  --from-file=kubeconfig=./kdp-workspace-operator-kubeconfig.yaml \
+kubectl create secret generic kdp-workspaces-kubeconfig \
+  --from-file=kubeconfig=./kdp-workspaces-operator-kubeconfig.yaml \
   -n kdp-workspaces-system
+
+# delete right-away
+rm ./kdp-workspaces-operator-kubeconfig.yaml
+
+KDP_BASE_URL=$(echo "$KDP_SERVER" | sed 's|/clusters/.*||')
 
 # Create ConfigMap with KDP connection details
 kubectl apply -f - <<EOF
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: kdp-workspace-config
+  name: kdp-workspaces-config
   namespace: kdp-workspaces-system
 data:
-  kcp-url: "https://your-kdp-api-server:8443"
+  kcp-url: "${KDP_BASE_URL}"
   kcp-workspace-path: "root"
   workspace-type: "kdp-organization"
 EOF
 ```
-
-**Important:**
-- Replace `https://your-kdp-api-server:8443` with your actual KDP API server URL
-- Store the `kdp-workspace-operator-kubeconfig.yaml` file securely
-- Do not commit kubeconfig files to version control
 
 ### Security Best Practices
 

@@ -120,8 +120,7 @@ func loadMaintainersAndProjects(db *gorm.DB, spreadsheetID, credentialsPath stri
 	)
 
 	if err != nil {
-		log.Fatalf("maintainerd: backend: loadMaintainersAndProjects: unable to retrieve Sheets client: %v", err)
-		return err
+		return fmt.Errorf("maintainerd: backend: loadMaintainersAndProjects: unable to retrieve Sheets client: %w", err)
 	}
 
 	rows, err := readSheetRows(
@@ -136,8 +135,7 @@ func loadMaintainersAndProjects(db *gorm.DB, spreadsheetID, credentialsPath stri
 	)
 
 	if err != nil {
-		log.Fatalf("maintainerd-backend: loadMaintainersAndProjects - readSheetRows: %v", err)
-		return err
+		return fmt.Errorf("maintainerd-backend: loadMaintainersAndProjects - readSheetRows: %w", err)
 	}
 
 	for _, row := range rows {
@@ -249,8 +247,7 @@ func loadStaff(db *gorm.DB, spreadsheetID, credentialsPath string) error {
 	)
 
 	if err != nil {
-		log.Fatalf("maintainerd: backend: loadStaff: unable to retrieve Sheets client: %v", err)
-		return err
+		return fmt.Errorf("maintainerd: backend: loadStaff: unable to retrieve Sheets client: %w", err)
 	}
 
 	rows, err := readSheetRows(
@@ -262,8 +259,7 @@ func loadStaff(db *gorm.DB, spreadsheetID, credentialsPath string) error {
 	)
 
 	if err != nil {
-		log.Fatalf("maintainerd-backend: loadStaff - readSheetRows: %v", err)
-		return err
+		return fmt.Errorf("maintainerd-backend: loadStaff - readSheetRows: %w", err)
 	}
 
 	for _, row := range rows {

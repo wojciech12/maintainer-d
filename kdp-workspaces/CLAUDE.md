@@ -7,7 +7,7 @@
 kubectl apply -f config/samples/kcp_config.yaml
 kubectl create secret generic kdp-workspace-kubeconfig \
   --from-file=kubeconfig=/path/to/kcp-kubeconfig.yaml \
-  -n kdp-workspace-system
+  -n kdp-workspaces-system
 
 # Run locally
 make run
@@ -33,7 +33,7 @@ kubectl get projects.maintainer-d.cncf.io -n maintainerd
 kubectl get projects.maintainer-d.cncf.io <project-name> -n maintainerd -o yaml
 
 # Debug: check operator logs
-kubectl logs -n kdp-workspace-system deployment/kdp-workspaces-controller-manager -f
+kubectl logs -n kdp-workspaces-system deployment/kdp-workspaces-controller-manager -f
 ```
 
 ## Validation Results

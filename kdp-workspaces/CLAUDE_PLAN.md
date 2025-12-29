@@ -728,7 +728,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: kdp-workspace-config
-  namespace: kdp-workspace-system
+  namespace: kdp-workspaces-system
 data:
   kcp-url: "https://services.cncf.io:8443"
   kcp-workspace-path: "root"
@@ -747,7 +747,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: kdp-workspace-kubeconfig
-  namespace: kdp-workspace-system
+  namespace: kdp-workspaces-system
 type: Opaque
 data:
   kubeconfig: <base64-encoded-kubeconfig>
@@ -1228,7 +1228,7 @@ go mod tidy
 make install
 
 # Create configuration
-kubectl create namespace kdp-workspace-system
+kubectl create namespace kdp-workspaces-system
 kubectl apply -f config/samples/kcp_config.yaml
 kubectl apply -f config/samples/kcp_secret.yaml
 
@@ -1262,8 +1262,8 @@ make docker-build docker-push IMG=ghcr.io/cncf/kdp-workspace-operator:latest
 make deploy IMG=ghcr.io/cncf/kdp-workspace-operator:latest
 
 # Verify deployment
-kubectl get pods -n kdp-workspace-system
-kubectl logs -n kdp-workspace-system deployment/kdp-workspace-controller-manager -f
+kubectl get pods -n kdp-workspaces-system
+kubectl logs -n kdp-workspaces-system deployment/kdp-workspace-controller-manager -f
 
 # Undeploy
 make undeploy

@@ -98,10 +98,10 @@ Create a namespace and service account for the operator:
 
 ```bash
 # Create namespace for operator service account
-kubectl create namespace kdp-workspace-sa
+kubectl create namespace kdp-workspaces-sa
 
 # Create the ServiceAccount
-kubectl create serviceaccount kdp-workspace-operator -n kdp-workspace-sa
+kubectl create serviceaccount kdp-workspaces-operator -n kdp-workspaces-sa
 ```
 
 ### Step 2: Configure RBAC Permissions
@@ -113,7 +113,7 @@ kubectl apply -f - <<EOF
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: kdp-workspace-manager
+  name: kdp-workspaces-manager
 rules:
   # Workspace management permissions
   - apiGroups: ["tenancy.kcp.io"]
@@ -136,15 +136,15 @@ kubectl apply -f - <<EOF
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: kdp-workspace-operator-workspace-manager
+  name: kdp-workspaces-operator-workspaces-manager
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: kdp-workspace-manager
+  name: kdp-workspaces-manager
 subjects:
   - kind: ServiceAccount
-    name: kdp-workspace-operator
-    namespace: kdp-workspace-sa
+    name: kdp-workspaces-operator
+    namespace: kdp-workspaces-sa
 EOF
 ```
 
@@ -157,10 +157,10 @@ kubectl apply -f - <<EOF
 apiVersion: v1
 kind: Secret
 metadata:
-  name: kdp-workspace-operator-token
-  namespace: kdp-workspace-sa
+  name: kdp-workspaces-operator-token
+  namespace: kdp-workspaces-sa
   annotations:
-    kubernetes.io/service-account.name: kdp-workspace-operator
+    kubernetes.io/service-account.name: kdp-workspaces-operator
 type: kubernetes.io/service-account-token
 EOF
 ```
@@ -169,11 +169,11 @@ Wait a few seconds, then extract the token and CA certificate:
 
 ```bash
 # Extract token
-TOKEN=$(kubectl get secret kdp-workspace-operator-token -n kdp-workspace-sa \
+TOKEN=$(kubectl get secret kdp-workspaces-operator-token -n kdp-workspace-sa \
   -o jsonpath='{.data.token}' | base64 -d)
 
 # Extract CA certificate
-CA_CERT=$(kubectl get secret kdp-workspace-operator-token -n kdp-workspace-sa \
+CA_CERT=$(kubectl get secret kdp-workspaces-operator-token -n kdp-workspace-sa \
   -o jsonpath='{.data.ca\.crt}')
 
 # Verify token exists
@@ -247,12 +247,12 @@ Create the Secret and ConfigMap in your Kubernetes cluster:
 export KUBECONFIG=~/.kube/config
 
 # Create namespace
-kubectl create namespace kdp-workspace-system
+kubectl create namespace kdp-workspaces-system
 
 # Create Secret with the operator kubeconfig
 kubectl create secret generic kdp-workspace-kubeconfig \
   --from-file=kubeconfig=./kdp-workspace-operator-kubeconfig.yaml \
-  -n kdp-workspace-system
+  -n kdp-workspaces-system
 
 # Create ConfigMap with KDP connection details
 kubectl apply -f - <<EOF
@@ -260,7 +260,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: kdp-workspace-config
-  namespace: kdp-workspace-system
+  namespace: kdp-workspaces-system
 data:
   kcp-url: "https://your-kdp-api-server:8443"
   kcp-workspace-path: "root"
@@ -286,7 +286,7 @@ EOF
 - Review and adjust permissions based on your security requirements
 
 **Secret Protection:**
-- Ensure Kubernetes RBAC restricts access to the Secret in `kdp-workspace-system` namespace
+- Ensure Kubernetes RBAC restricts access to the Secret in `kdp-workspaces-system` namespace
 - Use encryption at rest for Secrets in your Kubernetes cluster
 - Monitor access to the Secret using audit logs
 

@@ -88,7 +88,7 @@ func main() {
 		"Name of the ConfigMap containing kcp configuration")
 	flag.StringVar(&kcpConfigMapNamespace, "kcp-configmap-namespace", "kdp-workspaces-system",
 		"Namespace of the ConfigMap containing kcp configuration")
-	flag.StringVar(&kcpSecretName, "kcp-secret-name", "kdp-workspace-kubeconfig",
+	flag.StringVar(&kcpSecretName, "kcp-secret-name", "kdp-workspaces",
 		"Name of the Secret containing kcp kubeconfig")
 	flag.StringVar(&kcpSecretNamespace, "kcp-secret-namespace", "kdp-workspaces-system",
 		"Namespace of the Secret containing kcp kubeconfig")

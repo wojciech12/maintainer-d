@@ -198,7 +198,7 @@ export KUBECONFIG=~/.kube/config
 kubectl create namespace kdp-workspaces-system
 
 # Create Secret with the operator kubeconfig
-kubectl create secret generic kdp-workspaces-kubeconfig \
+kubectl create secret generic kdp-workspaces \
   --from-file=kubeconfig=./kdp-workspaces-operator-kubeconfig.yaml \
   -n kdp-workspaces-system
 

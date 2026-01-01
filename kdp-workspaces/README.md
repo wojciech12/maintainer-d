@@ -17,7 +17,8 @@
 **Build and push your image to the location specified by `IMG`:**
 
 ```sh
-make docker-build docker-push IMG=<some-registry>/kdp-workspaces:tag
+export DOCKER_IMG=wbkubermatic/cncf-kdp-workspaces:0.0.1
+make docker-build docker-push DOCKER_IMG=$IMG
 ```
 
 **NOTE:** This image ought to be published in the personal registry you specified.
@@ -33,7 +34,7 @@ make install
 **Deploy the Manager to the cluster with the image specified by `IMG`:**
 
 ```sh
-make deploy IMG=<some-registry>/kdp-workspaces:tag
+make deploy IMG=$DOCKER_IMG
 ```
 
 > **NOTE**: If you encounter RBAC errors, you may need to grant yourself cluster-admin

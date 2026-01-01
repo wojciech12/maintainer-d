@@ -212,7 +212,7 @@ kubectl apply -f - <<EOF
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: kdp-workspaces-config
+  name: kdp-workspaces
   namespace: kdp-workspaces-system
 data:
   kcp-url: "${KDP_BASE_URL}"

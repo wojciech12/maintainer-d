@@ -84,7 +84,7 @@ func main() {
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
 	// KCP configuration flags
-	flag.StringVar(&kcpConfigMapName, "kcp-configmap-name", "kdp-workspace-config",
+	flag.StringVar(&kcpConfigMapName, "kcp-configmap-name", "kdp-workspaces",
 		"Name of the ConfigMap containing kcp configuration")
 	flag.StringVar(&kcpConfigMapNamespace, "kcp-configmap-namespace", "kdp-workspaces-system",
 		"Namespace of the ConfigMap containing kcp configuration")

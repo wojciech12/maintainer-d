@@ -13,4 +13,4 @@ rules:
   # Workspace type permissions
   - apiGroups: ["tenancy.kcp.io"]
     resources: ["workspacetypes"]
-    verbs: ["get", "list"]
+    verbs: ["get", "list", "use"]

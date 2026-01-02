@@ -2,7 +2,12 @@
 
 ## Overview
 
-The KDP Workspaces Operator is responsible for creating and managing KDP (Kubermatic Development Platform) organizations for CNCF projects and foundation services. This operator bridges the maintainer-d CRDs with KCP workspace provisioning.
+The KDP Workspaces Operator is responsible for creating and managing KDP (Kubermatic Development Platform) organizations for CNCF projects and foundation services. This operator bridges the maintainer-d CRDs with KDP workspace (kcp workspaces of type *kdp-organization*) provisioning.
+
+We always work with two clusters:
+
+- KDP Cluster - the target cluster where the workspaces (type *kdp-organization*) live
+- Service Cluster - where the KDP Workspaces Operator runs and where the maintainer-d CRDs reside
 
 ### Purpose
 
@@ -32,22 +37,6 @@ The operator serves as the foundation for a self-service portal for CNCF project
 See @CLAUDE_20251223_kdp_organiztion_op_design_doc.md for detailed architecture and design decisions.
 
 ## Testing Operator
-
-### Setup
-
-```bash
-# Create kcp configuration (requires kcp kubeconfig with workspace permissions)
-kubectl apply -f config/samples/kcp_config.yaml
-kubectl create secret generic kdp-workspace-kubeconfig \
-  --from-file=kubeconfig=/path/to/kcp-kubeconfig.yaml \
-  -n kdp-workspaces-system
-
-# Run locally
-make run
-
-# Or deploy
-make deploy IMG=<registry>/kdp-workspaces:latest
-```
 
 ### Verify on KDP Cluster (https://services.cncf.io/)
 

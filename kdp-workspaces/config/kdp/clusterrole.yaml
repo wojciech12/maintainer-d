@@ -14,3 +14,7 @@ rules:
   - apiGroups: ["tenancy.kcp.io"]
     resources: ["workspacetypes"]
     verbs: ["get", "list", "use"]
+  # APIBinding permissions for workspace initialization
+  - apiGroups: ["apis.kcp.io"]
+    resources: ["apibindings"]
+    verbs: ["create", "get", "list", "watch", "update", "patch"]

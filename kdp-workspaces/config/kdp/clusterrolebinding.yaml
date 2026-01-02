@@ -1,0 +1,12 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kdp-workspaces-operator-workspaces-manager
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kdp-workspaces-manager
+subjects:
+  - kind: ServiceAccount
+    name: kdp-workspaces-operator
+    namespace: kdp-workspaces-sa

@@ -11,3 +11,5 @@ demo.db
 .gocache/
 .modcache/
 coverage.out
+QUICKSTART.md
+

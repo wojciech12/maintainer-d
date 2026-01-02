@@ -20,9 +20,9 @@ rules:
   verbs:
   - get
   - list
-  - watch
-  - update
   - patch
+  - update
+  - watch
 - apiGroups:
   - maintainer-d.cncf.io
   resources:

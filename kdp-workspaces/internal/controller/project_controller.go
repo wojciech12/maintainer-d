@@ -61,7 +61,7 @@ type ProjectReconciler struct {
 	WorkspaceType         string
 }
 
-// +kubebuilder:rbac:groups=maintainer-d.cncf.io,resources=projects,verbs=get;list;watch
+// +kubebuilder:rbac:groups=maintainer-d.cncf.io,resources=projects,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=maintainer-d.cncf.io,resources=projects/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch
 // +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch
@@ -221,7 +221,8 @@ func (r *ProjectReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 // updateWorkspaceStatus updates the Project with workspace information
 func (r *ProjectReconciler) updateWorkspaceStatus(ctx context.Context, project *metav1.PartialObjectMetadata, info *kcp.WorkspaceInfo) error {
-	// Update annotations with workspace details
+	// Update annotations with workspace details using patch
+	patch := client.MergeFrom(project.DeepCopy())
 	if project.Annotations == nil {
 		project.Annotations = make(map[string]string)
 	}
@@ -229,8 +230,8 @@ func (r *ProjectReconciler) updateWorkspaceStatus(ctx context.Context, project *
 	project.Annotations[AnnotationWorkspaceURL] = info.URL
 	project.Annotations[AnnotationWorkspacePhase] = info.Phase
 
-	if err := r.Update(ctx, project); err != nil {
-		return fmt.Errorf("failed to update annotations: %w", err)
+	if err := r.Patch(ctx, project, patch); err != nil {
+		return fmt.Errorf("failed to patch annotations: %w", err)
 	}
 
 	// Update condition based on workspace readiness
@@ -295,12 +296,26 @@ func (r *ProjectReconciler) updateCondition(ctx context.Context, project *metav1
 	// Set or update the condition
 	meta.SetStatusCondition(&conditions, condition)
 
+	// Convert conditions slice to []interface{} for unstructured storage
+	// Each condition must be a map[string]interface{} to avoid deep copy errors
+	conditionsInterface := make([]interface{}, len(conditions))
+	for i, cond := range conditions {
+		conditionsInterface[i] = map[string]interface{}{
+			"type":               cond.Type,
+			"status":             string(cond.Status),
+			"reason":             cond.Reason,
+			"message":            cond.Message,
+			"lastTransitionTime": cond.LastTransitionTime.Time.Format(time.RFC3339),
+			"observedGeneration": cond.ObservedGeneration,
+		}
+	}
+
 	// Update the status
 	statusMap := make(map[string]interface{})
 	if status, ok := currentProject.Object["status"].(map[string]interface{}); ok {
 		statusMap = status
 	}
-	statusMap["conditions"] = conditions
+	statusMap["conditions"] = conditionsInterface
 	if err := unstructured.SetNestedField(currentProject.Object, statusMap, "status"); err != nil {
 		return fmt.Errorf("failed to set status: %w", err)
 	}

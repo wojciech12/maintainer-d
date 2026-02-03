@@ -31,4 +31,24 @@ const (
 
 	// ScannerTypeSnyk identifies the Snyk scanner
 	ScannerTypeSnyk = "Snyk"
+
+	// SecretName is the name of the secret containing scanner credentials
+	SecretName = "code-scanners"
+
+	// SecretKeyFossaToken is the key for FOSSA API token
+	SecretKeyFossaToken = "fossa-api-token"
+
+	// SecretKeyFossaOrgID is the key for FOSSA organization ID
+	SecretKeyFossaOrgID = "fossa-organization-id"
+
+	// Condition types
+	ConditionTypeFossaTeamReady = "FossaTeamReady"
+	ConditionTypeConfigMapReady = "ConfigMapReady"
+
+	// Condition reasons
+	ReasonTeamCreated         = "TeamCreated"
+	ReasonTeamExists          = "TeamExists"
+	ReasonFossaAPIError       = "APIError"
+	ReasonCredentialsNotFound = "CredentialsNotFound"
+	ReasonConfigMapCreated    = "ConfigMapCreated"
 )

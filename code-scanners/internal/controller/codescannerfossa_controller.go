@@ -42,6 +42,8 @@ type CodeScannerFossaReconciler struct {
 // +kubebuilder:rbac:groups=maintainer-d.cncf.io,resources=codescannerfossas/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=maintainer-d.cncf.io,resources=codescannerfossas/finalizers,verbs=update
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch
+// +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -124,6 +126,38 @@ func (r *CodeScannerFossaReconciler) configMapForFossa(fossa *maintainerdcncfiov
 			ConfigMapKeyProjectName: fossa.Spec.ProjectName,
 		},
 	}
+}
+
+// getFossaCredentials retrieves FOSSA credentials from the secret
+func (r *CodeScannerFossaReconciler) getFossaCredentials(ctx context.Context, namespace string) (token, orgID string, err error) {
+	log := logf.FromContext(ctx)
+
+	secret := &corev1.Secret{}
+	key := client.ObjectKey{
+		Name:      SecretName,
+		Namespace: namespace,
+	}
+
+	if err := r.Get(ctx, key, secret); err != nil {
+		if errors.IsNotFound(err) {
+			return "", "", fmt.Errorf("secret %s not found in namespace %s", SecretName, namespace)
+		}
+		return "", "", fmt.Errorf("failed to get secret %s: %w", SecretName, err)
+	}
+
+	token = string(secret.Data[SecretKeyFossaToken])
+	orgID = string(secret.Data[SecretKeyFossaOrgID])
+
+	if token == "" {
+		return "", "", fmt.Errorf("missing %s in secret", SecretKeyFossaToken)
+	}
+	if orgID == "" {
+		return "", "", fmt.Errorf("missing %s in secret", SecretKeyFossaOrgID)
+	}
+
+	log.V(1).Info("Retrieved FOSSA credentials", "orgID", orgID)
+	// NEVER log token value
+	return token, orgID, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

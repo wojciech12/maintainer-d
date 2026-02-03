@@ -18,8 +18,14 @@ spec:
     - jsonPath: .spec.projectName
       name: Project
       type: string
+    - jsonPath: .status.fossaTeam.id
+      name: FossaTeamID
+      type: integer
     - jsonPath: .status.configMapRef
       name: ConfigMap
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="FossaTeamReady")].status
+      name: Ready
       type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
@@ -128,6 +134,35 @@ spec:
                 description: ConfigMapRef is the namespace/name reference to the created
                   ConfigMap
                 type: string
+              fossaTeam:
+                description: FossaTeam contains details about the created FOSSA Team
+                properties:
+                  createdAt:
+                    description: CreatedAt is when the team was created in FOSSA
+                    format: date-time
+                    type: string
+                  id:
+                    description: ID is the FOSSA team ID
+                    type: integer
+                  name:
+                    description: Name is the team name (matches projectName)
+                    type: string
+                  organizationId:
+                    description: OrganizationID is the FOSSA organization ID
+                    type: integer
+                  url:
+                    description: URL is a link to the team in FOSSA UI
+                    type: string
+                required:
+                - id
+                - name
+                - organizationId
+                type: object
+              observedGeneration:
+                description: ObservedGeneration is the generation observed by the
+                  controller
+                format: int64
+                type: integer
             type: object
         required:
         - spec

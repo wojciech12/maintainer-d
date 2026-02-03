@@ -34,9 +34,17 @@ type CodeScannerFossaSpec struct {
 
 // CodeScannerFossaStatus defines the observed state of CodeScannerFossa.
 type CodeScannerFossaStatus struct {
+	// ObservedGeneration is the generation observed by the controller
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
 	// ConfigMapRef is the namespace/name reference to the created ConfigMap
 	// +optional
 	ConfigMapRef string `json:"configMapRef,omitempty"`
+
+	// FossaTeam contains details about the created FOSSA Team
+	// +optional
+	FossaTeam *FossaTeamReference `json:"fossaTeam,omitempty"`
 
 	// Conditions represent the latest available observations of the resource's state
 	// +listType=map
@@ -45,10 +53,32 @@ type CodeScannerFossaStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
+// FossaTeamReference contains details about the FOSSA Team
+type FossaTeamReference struct {
+	// ID is the FOSSA team ID
+	ID int `json:"id"`
+
+	// Name is the team name (matches projectName)
+	Name string `json:"name"`
+
+	// OrganizationID is the FOSSA organization ID
+	OrganizationID int `json:"organizationId"`
+
+	// URL is a link to the team in FOSSA UI
+	// +optional
+	URL string `json:"url,omitempty"`
+
+	// CreatedAt is when the team was created in FOSSA
+	// +optional
+	CreatedAt *metav1.Time `json:"createdAt,omitempty"`
+}
+
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Project",type=string,JSONPath=`.spec.projectName`
+// +kubebuilder:printcolumn:name="FossaTeamID",type=integer,JSONPath=`.status.fossaTeam.id`
 // +kubebuilder:printcolumn:name="ConfigMap",type=string,JSONPath=`.status.configMapRef`
+// +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="FossaTeamReady")].status`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // CodeScannerFossa is the Schema for the codescannerfossas API

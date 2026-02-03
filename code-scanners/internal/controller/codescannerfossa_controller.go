@@ -29,6 +29,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	maintainerdcncfiov1alpha1 "github.com/cncf/maintainer-d/code-scanners/api/v1alpha1"
+	_ "github.com/cncf/maintainer-d/plugins/fossa"
 )
 
 // CodeScannerFossaReconciler reconciles a CodeScannerFossa object

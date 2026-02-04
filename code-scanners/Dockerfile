@@ -1,18 +1,28 @@
 # Build the manager binary
+# NOTE: Build from parent directory with: docker build -f code-scanners/Dockerfile -t <image> .
 FROM golang:1.24 AS builder
 ARG TARGETOS
 ARG TARGETARCH
 
 WORKDIR /workspace
-# Copy the Go Modules manifests
+
+# Copy parent module files (for plugins/fossa dependency)
 COPY go.mod go.mod
 COPY go.sum go.sum
+COPY plugins/ plugins/
+
+# Copy code-scanners module
+COPY code-scanners/go.mod code-scanners/go.mod
+COPY code-scanners/go.sum code-scanners/go.sum
+
+WORKDIR /workspace/code-scanners
+
 # cache deps before building and copying source so that we don't need to re-download as much
 # and so that source changes don't invalidate our downloaded layer
 RUN go mod download
 
-# Copy the Go source (relies on .dockerignore to filter)
-COPY . .
+# Copy the code-scanners Go source
+COPY code-scanners/ .
 
 # Build
 # the GOARCH has no default value to allow the binary to be built according to the host where the command
@@ -25,7 +35,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o ma
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
 FROM gcr.io/distroless/static:nonroot
 WORKDIR /
-COPY --from=builder /workspace/manager .
+COPY --from=builder /workspace/code-scanners/manager .
 USER 65532:65532
 
 ENTRYPOINT ["/manager"]

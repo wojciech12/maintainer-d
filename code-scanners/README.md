@@ -16,7 +16,9 @@
 **Build and push your image to the location specified by `IMG`:**
 
 ```sh
-make docker-build docker-push IMG=<some-registry>/code-scanners:tag
+export IMG=wbkubermatic/code-scanners:0.0.1
+
+make docker-build docker-push IMG=$IMG
 ```
 
 **NOTE:** This image ought to be published in the personal registry you specified.
@@ -37,6 +39,35 @@ make deploy IMG=<some-registry>/code-scanners:tag
 
 > **NOTE**: If you encounter RBAC errors, you may need to grant yourself cluster-admin
 privileges or be logged in as admin.
+
+### Configure FOSSA Credentials
+
+Before creating `CodeScannerFossa` resources, you need to create a secret with your FOSSA credentials in the same namespace:
+
+```sh
+kubectl create secret generic code-scanners \
+  -n code-scanners \
+  --from-literal=fossa-api-token='YOUR_FOSSA_API_TOKEN' \
+  --from-literal=fossa-organization-id='YOUR_FOSSA_ORG_ID'
+```
+
+Or apply a YAML manifest:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: code-scanners
+  namespace: code-scanners
+type: Opaque
+stringData:
+  fossa-api-token: "YOUR_FOSSA_API_TOKEN"
+  fossa-organization-id: "YOUR_FOSSA_ORG_ID"
+```
+
+**Required keys:**
+- `fossa-api-token` - Your FOSSA Full API Token
+- `fossa-organization-id` - Your FOSSA organization ID
 
 **Create instances of your solution**
 You can apply the samples (examples) from the config/sample:

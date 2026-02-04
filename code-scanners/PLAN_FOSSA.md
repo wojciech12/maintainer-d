@@ -892,7 +892,7 @@ CodeScannerFossa CR (projectName: "argo")
    ### Check Controller Logs
 
    ```bash
-   kubectl logs -n code-scanners-system deployment/code-scanners-controller-manager -f
+   kubectl logs -n code-scanners deployment/code-scanners-controller-manager -f
    ```
 
    ## Next Steps

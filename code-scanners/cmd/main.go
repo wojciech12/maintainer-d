@@ -178,9 +178,17 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Get the namespace where credentials secret is located (defaults to operator namespace)
+	credsNamespace := os.Getenv("POD_NAMESPACE")
+	if credsNamespace == "" {
+		credsNamespace = "code-scanners"
+	}
+	setupLog.Info("Using credentials namespace", "namespace", credsNamespace)
+
 	if err := (&controller.CodeScannerFossaReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:               mgr.GetClient(),
+		Scheme:               mgr.GetScheme(),
+		CredentialsNamespace: credsNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "CodeScannerFossa")
 		os.Exit(1)

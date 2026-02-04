@@ -34,7 +34,7 @@ import (
 )
 
 // namespace where the project is deployed in
-const namespace = "code-scanners-system"
+const namespace = "code-scanners"
 
 // serviceAccountName created for the project
 const serviceAccountName = "code-scanners-controller-manager"

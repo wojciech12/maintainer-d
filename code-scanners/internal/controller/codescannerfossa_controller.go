@@ -53,6 +53,10 @@ type CodeScannerFossaReconciler struct {
 
 	// FossaClientFactory creates FOSSA clients (injectable for testing)
 	FossaClientFactory func(token string) FossaClient
+
+	// CredentialsNamespace is the namespace where the credentials secret is located.
+	// If empty, the CR's namespace is used.
+	CredentialsNamespace string
 }
 
 // +kubebuilder:rbac:groups=maintainer-d.cncf.io,resources=codescannerfossas,verbs=get;list;watch;create;update;patch;delete
@@ -81,8 +85,12 @@ func (r *CodeScannerFossaReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	// 2. Handle deletion (finalizer logic will be added later)
 	// For now, ConfigMap is deleted via owner reference
 
-	// 3. Get FOSSA credentials
-	token, orgID, err := r.getFossaCredentials(ctx, fossaCR.Namespace)
+	// 3. Get FOSSA credentials (from operator namespace if set, otherwise CR namespace)
+	credsNamespace := r.CredentialsNamespace
+	if credsNamespace == "" {
+		credsNamespace = fossaCR.Namespace
+	}
+	token, orgID, err := r.getFossaCredentials(ctx, credsNamespace)
 	if err != nil {
 		log.Error(err, "Failed to get FOSSA credentials")
 		r.setCondition(fossaCR, ConditionTypeFossaTeamReady, metav1.ConditionFalse,

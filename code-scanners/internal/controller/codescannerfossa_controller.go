@@ -40,6 +40,10 @@ import (
 type FossaClient interface {
 	CreateTeam(name string) (*fossa.Team, error)
 	FetchTeam(name string) (*fossa.Team, error)
+	// User invitation methods
+	SendUserInvitation(email string) error
+	HasPendingInvitation(email string) (bool, error)
+	FetchUsers() ([]fossa.User, error)
 }
 
 // Ensure the real client implements the interface

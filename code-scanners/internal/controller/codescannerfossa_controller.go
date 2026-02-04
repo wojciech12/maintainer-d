@@ -190,7 +190,7 @@ func (r *CodeScannerFossaReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			r.Recorder.Event(fossaCR, corev1.EventTypeWarning, ReasonInvitationsFailed, err.Error())
 		} else {
 			// Count statuses for condition message
-			var pending, accepted, failed int
+			var pending, accepted, failed, expired int
 			for _, inv := range invitations {
 				switch inv.Status {
 				case InvitationStatusPending:
@@ -199,15 +199,17 @@ func (r *CodeScannerFossaReconciler) Reconcile(ctx context.Context, req ctrl.Req
 					accepted++
 				case InvitationStatusFailed:
 					failed++
+				case InvitationStatusExpired:
+					expired++
 				}
 			}
 
 			if failed > 0 && accepted == 0 && pending == 0 {
 				r.setCondition(fossaCR, ConditionTypeUserInvitations, metav1.ConditionFalse,
 					ReasonInvitationsFailed, fmt.Sprintf("All %d invitations failed", failed))
-			} else if failed > 0 || pending > 0 {
+			} else if failed > 0 || pending > 0 || expired > 0 {
 				r.setCondition(fossaCR, ConditionTypeUserInvitations, metav1.ConditionFalse,
-					ReasonInvitationsPartial, fmt.Sprintf("Invitations: %d accepted, %d pending, %d failed", accepted, pending, failed))
+					ReasonInvitationsPartial, fmt.Sprintf("Invitations: %d accepted, %d pending, %d failed, %d expired", accepted, pending, failed, expired))
 			} else {
 				r.setCondition(fossaCR, ConditionTypeUserInvitations, metav1.ConditionTrue,
 					ReasonInvitationsSent, fmt.Sprintf("All %d invitations accepted", accepted))
@@ -412,6 +414,14 @@ func (r *CodeScannerFossaReconciler) ensureUserInvitations(
 			invitations = append(invitations, inv)
 			hasPending = true
 			continue
+		}
+
+		// Check if we had a pending invitation that has now expired (no longer in FOSSA's pending list)
+		if existing, ok := existingMap[emailLower]; ok && existing.Status == InvitationStatusPending && existing.InvitedAt != nil {
+			if time.Since(existing.InvitedAt.Time) > InvitationTTL {
+				log.Info("Previous invitation expired, resending", "email", email, "originalInvitedAt", existing.InvitedAt)
+				// Fall through to send a new invitation
+			}
 		}
 
 		// Send new invitation

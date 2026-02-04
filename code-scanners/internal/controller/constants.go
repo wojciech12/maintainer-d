@@ -16,6 +16,8 @@ limitations under the License.
 
 package controller
 
+import "time"
+
 const (
 	// AnnotationConfigMapRef is the annotation key for ConfigMap reference
 	AnnotationConfigMapRef = "maintainer-d.cncf.io/configmap-ref"
@@ -61,4 +63,8 @@ const (
 	InvitationStatusPending  = "Pending"
 	InvitationStatusAccepted = "Accepted"
 	InvitationStatusFailed   = "Failed"
+	InvitationStatusExpired  = "Expired"
+
+	// InvitationTTL is the lifetime of a FOSSA invitation (48 hours per FOSSA API docs)
+	InvitationTTL = 48 * time.Hour
 )

@@ -45,6 +45,11 @@ type mockFossaClient struct {
 	sendInvitationErr    error
 	fetchUsersErr        error
 	pendingInvitationErr error
+
+	// Team membership fields
+	teamMembers          map[int][]string // teamID -> []email
+	addToTeamErr         error
+	fetchTeamMembersErr  error
 }
 
 func newMockFossaClient() *mockFossaClient {
@@ -52,6 +57,7 @@ func newMockFossaClient() *mockFossaClient {
 		teams:              make(map[string]*fossa.Team),
 		nextTeamID:         1,
 		pendingInvitations: make(map[string]bool),
+		teamMembers:        make(map[int][]string),
 	}
 }
 
@@ -103,6 +109,44 @@ func (m *mockFossaClient) FetchUsers() ([]fossa.User, error) {
 		return nil, m.fetchUsersErr
 	}
 	return m.users, nil
+}
+
+func (m *mockFossaClient) AddUserToTeamByEmail(teamID int, email string, roleID int) error {
+	if m.addToTeamErr != nil {
+		return m.addToTeamErr
+	}
+	// Check if user exists in users list
+	found := false
+	for _, user := range m.users {
+		if user.Email == email {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return fmt.Errorf("user not found by email: %s", email)
+	}
+	// Check if already on team
+	if members, ok := m.teamMembers[teamID]; ok {
+		for _, member := range members {
+			if member == email {
+				return fossa.ErrUserAlreadyMember
+			}
+		}
+	}
+	// Add to team
+	m.teamMembers[teamID] = append(m.teamMembers[teamID], email)
+	return nil
+}
+
+func (m *mockFossaClient) FetchTeamUserEmails(teamID int) ([]string, error) {
+	if m.fetchTeamMembersErr != nil {
+		return nil, m.fetchTeamMembersErr
+	}
+	if members, ok := m.teamMembers[teamID]; ok {
+		return members, nil
+	}
+	return []string{}, nil
 }
 
 // TestReconcile_CreatesFossaTeam tests successful team creation and ConfigMap generation

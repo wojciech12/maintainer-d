@@ -48,6 +48,9 @@ type FossaClient interface {
 	SendUserInvitation(email string) error
 	HasPendingInvitation(email string) (bool, error)
 	FetchUsers() ([]fossa.User, error)
+	// Team membership methods
+	AddUserToTeamByEmail(teamID int, email string, roleID int) error
+	FetchTeamUserEmails(teamID int) ([]string, error)
 }
 
 // Ensure the real client implements the interface

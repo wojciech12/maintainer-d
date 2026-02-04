@@ -59,6 +59,12 @@ spec:
                 description: ConfigMapName is the name of the ConfigMap to create
                   for this scanner
                 type: string
+              fossaUserEmails:
+                description: FossaUserEmails is a list of email addresses to invite
+                  to FOSSA
+                items:
+                  type: string
+                type: array
               projectName:
                 description: ProjectName is the name of the CNCF project to scan
                 minLength: 1
@@ -163,6 +169,35 @@ spec:
                   controller
                 format: int64
                 type: integer
+              userInvitations:
+                description: UserInvitations tracks the status of user invitations
+                items:
+                  description: FossaUserInvitation tracks the invitation status for
+                    a user
+                  properties:
+                    acceptedAt:
+                      description: AcceptedAt is when the user accepted the invitation
+                      format: date-time
+                      type: string
+                    email:
+                      description: Email is the user's email address
+                      type: string
+                    invitedAt:
+                      description: InvitedAt is when the invitation was sent
+                      format: date-time
+                      type: string
+                    message:
+                      description: Message provides additional context about the status
+                      type: string
+                    status:
+                      description: Status is the current invitation status (Pending,
+                        Accepted, Failed)
+                      type: string
+                  required:
+                  - email
+                  - status
+                  type: object
+                type: array
             type: object
         required:
         - spec

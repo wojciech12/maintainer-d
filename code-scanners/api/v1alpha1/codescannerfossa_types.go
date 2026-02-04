@@ -30,6 +30,10 @@ type CodeScannerFossaSpec struct {
 	// ConfigMapName is the name of the ConfigMap to create for this scanner
 	// +optional
 	ConfigMapName string `json:"configMapName,omitempty"`
+
+	// FossaUserEmails is a list of email addresses to invite to FOSSA
+	// +optional
+	FossaUserEmails []string `json:"fossaUserEmails,omitempty"`
 }
 
 // CodeScannerFossaStatus defines the observed state of CodeScannerFossa.
@@ -46,11 +50,36 @@ type CodeScannerFossaStatus struct {
 	// +optional
 	FossaTeam *FossaTeamReference `json:"fossaTeam,omitempty"`
 
+	// UserInvitations tracks the status of user invitations
+	// +optional
+	UserInvitations []FossaUserInvitation `json:"userInvitations,omitempty"`
+
 	// Conditions represent the latest available observations of the resource's state
 	// +listType=map
 	// +listMapKey=type
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
+// FossaUserInvitation tracks the invitation status for a user
+type FossaUserInvitation struct {
+	// Email is the user's email address
+	Email string `json:"email"`
+
+	// Status is the current invitation status (Pending, Accepted, Failed)
+	Status string `json:"status"`
+
+	// Message provides additional context about the status
+	// +optional
+	Message string `json:"message,omitempty"`
+
+	// InvitedAt is when the invitation was sent
+	// +optional
+	InvitedAt *metav1.Time `json:"invitedAt,omitempty"`
+
+	// AcceptedAt is when the user accepted the invitation
+	// +optional
+	AcceptedAt *metav1.Time `json:"acceptedAt,omitempty"`
 }
 
 // FossaTeamReference contains details about the FOSSA Team

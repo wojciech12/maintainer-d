@@ -183,44 +183,65 @@ func (r *CodeScannerFossaReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	// 8. Process user invitations if specified
 	var requeueAfter time.Duration
 	if len(fossaCR.Spec.FossaUserEmails) > 0 {
+		// 8.1: Ensure invitations are sent
 		invitations, hasPending, err := r.ensureUserInvitations(ctx, fossaClient, fossaCR.Spec.FossaUserEmails, fossaCR.Status.UserInvitations)
-		fossaCR.Status.UserInvitations = invitations
-
 		if err != nil {
 			log.Error(err, "Failed to process user invitations")
 			r.setCondition(fossaCR, ConditionTypeUserInvitations, metav1.ConditionFalse,
 				ReasonInvitationsFailed, err.Error())
 			r.Recorder.Event(fossaCR, corev1.EventTypeWarning, ReasonInvitationsFailed, err.Error())
-		} else {
-			// Count statuses for condition message
-			var pending, accepted, failed, expired int
-			for _, inv := range invitations {
-				switch inv.Status {
-				case InvitationStatusPending:
-					pending++
-				case InvitationStatusAccepted:
-					accepted++
-				case InvitationStatusFailed:
-					failed++
-				case InvitationStatusExpired:
-					expired++
-				}
-			}
+			// Continue with partial results if available
+		}
 
-			if failed > 0 && accepted == 0 && pending == 0 {
-				r.setCondition(fossaCR, ConditionTypeUserInvitations, metav1.ConditionFalse,
-					ReasonInvitationsFailed, fmt.Sprintf("All %d invitations failed", failed))
-			} else if failed > 0 || pending > 0 || expired > 0 {
-				r.setCondition(fossaCR, ConditionTypeUserInvitations, metav1.ConditionFalse,
-					ReasonInvitationsPartial, fmt.Sprintf("Invitations: %d accepted, %d pending, %d failed, %d expired", accepted, pending, failed, expired))
-			} else {
-				r.setCondition(fossaCR, ConditionTypeUserInvitations, metav1.ConditionTrue,
-					ReasonInvitationsSent, fmt.Sprintf("All %d invitations accepted", accepted))
+		// 8.2: Ensure accepted users are added to team
+		if team != nil && team.ID > 0 {
+			invitations, err = r.ensureTeamMembership(ctx, fossaClient, team.ID, invitations)
+			if err != nil {
+				log.Error(err, "Failed to process team membership")
+				r.Recorder.Event(fossaCR, corev1.EventTypeWarning, "TeamMembershipFailed", err.Error())
+				// Continue even if team membership fails - update status with what we have
 			}
 		}
 
-		// Requeue if there are pending invitations to check status later
-		if hasPending {
+		fossaCR.Status.UserInvitations = invitations
+
+		// 8.3: Update conditions based on final status
+		var pending, accepted, addedToTeam, alreadyMember, failed, expired int
+		for _, inv := range invitations {
+			switch inv.Status {
+			case InvitationStatusPending:
+				pending++
+			case InvitationStatusAccepted:
+				accepted++
+			case InvitationStatusAddedToTeam:
+				addedToTeam++
+			case InvitationStatusAlreadyMember:
+				alreadyMember++
+			case InvitationStatusFailed:
+				failed++
+			case InvitationStatusExpired:
+				expired++
+			}
+		}
+
+		// Combine addedToTeam and alreadyMember as successful team members
+		totalOnTeam := addedToTeam + alreadyMember
+
+		if totalOnTeam == len(invitations) && totalOnTeam > 0 {
+			r.setCondition(fossaCR, ConditionTypeUserInvitations, metav1.ConditionTrue,
+				ReasonTeamMembershipProcessed, fmt.Sprintf("All %d users added to team", totalOnTeam))
+		} else if failed > 0 && totalOnTeam == 0 && accepted == 0 && pending == 0 {
+			r.setCondition(fossaCR, ConditionTypeUserInvitations, metav1.ConditionFalse,
+				ReasonInvitationsFailed, fmt.Sprintf("All %d invitations failed", failed))
+		} else {
+			r.setCondition(fossaCR, ConditionTypeUserInvitations, metav1.ConditionFalse,
+				ReasonInvitationsPartial,
+				fmt.Sprintf("Invitations: %d on team, %d accepted, %d pending, %d failed, %d expired",
+					totalOnTeam, accepted, pending, failed, expired))
+		}
+
+		// Requeue if there are pending invitations or accepted users not yet on team
+		if hasPending || accepted > 0 {
 			requeueAfter = time.Hour
 		}
 	} else {
@@ -474,6 +495,96 @@ func (r *CodeScannerFossaReconciler) ensureUserInvitations(
 	}
 
 	return invitations, hasPending, nil
+}
+
+// ensureTeamMembership ensures that users who have accepted invitations
+// are added to the FOSSA team.
+// It updates the invitation status to "AddedToTeam" when successful.
+func (r *CodeScannerFossaReconciler) ensureTeamMembership(
+	ctx context.Context,
+	fossaClient FossaClient,
+	teamID int,
+	invitations []maintainerdcncfiov1alpha1.FossaUserInvitation,
+) ([]maintainerdcncfiov1alpha1.FossaUserInvitation, error) {
+	log := logf.FromContext(ctx)
+
+	// Fetch current team members for comparison
+	teamEmails, err := fossaClient.FetchTeamUserEmails(teamID)
+	if err != nil {
+		log.Error(err, "Failed to fetch team members")
+		return invitations, fmt.Errorf("failed to fetch team members: %w", err)
+	}
+
+	// Build a set of team member emails (lowercase for comparison)
+	teamMemberSet := make(map[string]bool)
+	for _, email := range teamEmails {
+		teamMemberSet[strings.ToLower(email)] = true
+	}
+
+	var updated []maintainerdcncfiov1alpha1.FossaUserInvitation
+	var addedCount, alreadyMemberCount int
+
+	for _, inv := range invitations {
+		emailLower := strings.ToLower(inv.Email)
+
+		// Only process users who have accepted but not yet added to team
+		if inv.Status != InvitationStatusAccepted && inv.Status != InvitationStatusAlreadyMember {
+			updated = append(updated, inv)
+			continue
+		}
+
+		// Check if already on team (avoid unnecessary API call)
+		if teamMemberSet[emailLower] {
+			log.V(1).Info("User already on team", "email", inv.Email)
+			if inv.Status != InvitationStatusAddedToTeam {
+				now := metav1.Now()
+				inv.Status = InvitationStatusAddedToTeam
+				inv.Message = "User is a team member"
+				inv.AddedToTeamAt = &now
+				alreadyMemberCount++
+			}
+			updated = append(updated, inv)
+			continue
+		}
+
+		// Add user to team
+		log.Info("Adding user to FOSSA team", "email", inv.Email, "teamID", teamID)
+		err := fossaClient.AddUserToTeamByEmail(teamID, inv.Email, 0)
+		if err != nil {
+			// Handle idempotency error gracefully
+			if errors.Is(err, fossa.ErrUserAlreadyMember) {
+				log.V(1).Info("User already on team (race condition)", "email", inv.Email)
+				now := metav1.Now()
+				inv.Status = InvitationStatusAddedToTeam
+				inv.Message = "User is a team member"
+				inv.AddedToTeamAt = &now
+				alreadyMemberCount++
+				updated = append(updated, inv)
+				continue
+			}
+
+			log.Error(err, "Failed to add user to team", "email", inv.Email)
+			inv.Message = fmt.Sprintf("Failed to add to team: %v", err)
+			updated = append(updated, inv)
+			continue
+		}
+
+		// Success - update status
+		now := metav1.Now()
+		inv.Status = InvitationStatusAddedToTeam
+		inv.Message = "User added to team"
+		inv.AddedToTeamAt = &now
+		addedCount++
+		updated = append(updated, inv)
+
+		log.Info("User added to team successfully", "email", inv.Email)
+	}
+
+	if addedCount > 0 || alreadyMemberCount > 0 {
+		log.Info("Team membership processed", "added", addedCount, "alreadyMember", alreadyMemberCount)
+	}
+
+	return updated, nil
 }
 
 // setCondition updates or adds a condition to the CR status

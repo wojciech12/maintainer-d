@@ -179,6 +179,11 @@ spec:
                       description: AcceptedAt is when the user accepted the invitation
                       format: date-time
                       type: string
+                    addedToTeamAt:
+                      description: AddedToTeamAt is when the user was added to the
+                        FOSSA team
+                      format: date-time
+                      type: string
                     email:
                       description: Email is the user's email address
                       type: string
@@ -191,7 +196,7 @@ spec:
                       type: string
                     status:
                       description: Status is the current invitation status (Pending,
-                        Accepted, Failed)
+                        Accepted, AddedToTeam, AlreadyMember, Failed, Expired)
                       type: string
                   required:
                   - email

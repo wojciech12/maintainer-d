@@ -66,7 +66,7 @@ type FossaUserInvitation struct {
 	// Email is the user's email address
 	Email string `json:"email"`
 
-	// Status is the current invitation status (Pending, Accepted, Failed)
+	// Status is the current invitation status (Pending, Accepted, AddedToTeam, AlreadyMember, Failed, Expired)
 	Status string `json:"status"`
 
 	// Message provides additional context about the status
@@ -80,6 +80,10 @@ type FossaUserInvitation struct {
 	// AcceptedAt is when the user accepted the invitation
 	// +optional
 	AcceptedAt *metav1.Time `json:"acceptedAt,omitempty"`
+
+	// AddedToTeamAt is when the user was added to the FOSSA team
+	// +optional
+	AddedToTeamAt *metav1.Time `json:"addedToTeamAt,omitempty"`
 }
 
 // FossaTeamReference contains details about the FOSSA Team

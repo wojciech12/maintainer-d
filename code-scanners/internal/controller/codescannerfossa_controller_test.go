@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -115,10 +116,10 @@ func (m *mockFossaClient) AddUserToTeamByEmail(teamID int, email string, roleID 
 	if m.addToTeamErr != nil {
 		return m.addToTeamErr
 	}
-	// Check if user exists in users list
+	// Check if user exists in users list (case-insensitive)
 	found := false
 	for _, user := range m.users {
-		if user.Email == email {
+		if strings.EqualFold(user.Email, email) {
 			found = true
 			break
 		}
@@ -126,10 +127,10 @@ func (m *mockFossaClient) AddUserToTeamByEmail(teamID int, email string, roleID 
 	if !found {
 		return fmt.Errorf("user not found by email: %s", email)
 	}
-	// Check if already on team
+	// Check if already on team (case-insensitive)
 	if members, ok := m.teamMembers[teamID]; ok {
 		for _, member := range members {
-			if member == email {
+			if strings.EqualFold(member, email) {
 				return fossa.ErrUserAlreadyMember
 			}
 		}
@@ -147,6 +148,18 @@ func (m *mockFossaClient) FetchTeamUserEmails(teamID int) ([]string, error) {
 		return members, nil
 	}
 	return []string{}, nil
+}
+
+// RemoveUserFromTeam simulates manual team member removal for testing edge cases
+func (m *mockFossaClient) RemoveUserFromTeam(teamID int, email string) {
+	if members, ok := m.teamMembers[teamID]; ok {
+		for i, member := range members {
+			if strings.EqualFold(member, email) {
+				m.teamMembers[teamID] = append(members[:i], members[i+1:]...)
+				break
+			}
+		}
+	}
 }
 
 // TestReconcile_CreatesFossaTeam tests successful team creation and ConfigMap generation

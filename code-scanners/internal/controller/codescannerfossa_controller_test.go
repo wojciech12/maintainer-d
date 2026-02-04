@@ -38,12 +38,20 @@ type mockFossaClient struct {
 	createErr  error
 	fetchErr   error
 	nextTeamID int
+
+	// User invitation fields
+	users                 []fossa.User
+	pendingInvitations    map[string]bool
+	sendInvitationErr     error
+	fetchUsersErr         error
+	pendingInvitationErr  error
 }
 
 func newMockFossaClient() *mockFossaClient {
 	return &mockFossaClient{
-		teams:      make(map[string]*fossa.Team),
-		nextTeamID: 1,
+		teams:              make(map[string]*fossa.Team),
+		nextTeamID:         1,
+		pendingInvitations: make(map[string]bool),
 	}
 }
 
@@ -73,6 +81,28 @@ func (m *mockFossaClient) FetchTeam(name string) (*fossa.Team, error) {
 		return team, nil
 	}
 	return nil, fmt.Errorf("team not found: %s", name)
+}
+
+func (m *mockFossaClient) SendUserInvitation(email string) error {
+	if m.sendInvitationErr != nil {
+		return m.sendInvitationErr
+	}
+	m.pendingInvitations[email] = true
+	return nil
+}
+
+func (m *mockFossaClient) HasPendingInvitation(email string) (bool, error) {
+	if m.pendingInvitationErr != nil {
+		return false, m.pendingInvitationErr
+	}
+	return m.pendingInvitations[email], nil
+}
+
+func (m *mockFossaClient) FetchUsers() ([]fossa.User, error) {
+	if m.fetchUsersErr != nil {
+		return nil, m.fetchUsersErr
+	}
+	return m.users, nil
 }
 
 // TestReconcile_CreatesFossaTeam tests successful team creation and ConfigMap generation

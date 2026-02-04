@@ -42,8 +42,9 @@ const (
 	SecretKeyFossaOrgID = "fossa-organization-id"
 
 	// Condition types
-	ConditionTypeFossaTeamReady = "FossaTeamReady"
-	ConditionTypeConfigMapReady = "ConfigMapReady"
+	ConditionTypeFossaTeamReady  = "FossaTeamReady"
+	ConditionTypeConfigMapReady  = "ConfigMapReady"
+	ConditionTypeUserInvitations = "UserInvitationsProcessed"
 
 	// Condition reasons
 	ReasonTeamCreated         = "TeamCreated"
@@ -51,4 +52,13 @@ const (
 	ReasonFossaAPIError       = "APIError"
 	ReasonCredentialsNotFound = "CredentialsNotFound"
 	ReasonConfigMapCreated    = "ConfigMapCreated"
+	ReasonInvitationsSent     = "InvitationsSent"
+	ReasonInvitationsPartial  = "InvitationsPartiallyProcessed"
+	ReasonInvitationsFailed   = "InvitationsFailed"
+	ReasonNoInvitations       = "NoInvitationsRequested"
+
+	// User invitation statuses
+	InvitationStatusPending  = "Pending"
+	InvitationStatusAccepted = "Accepted"
+	InvitationStatusFailed   = "Failed"
 )

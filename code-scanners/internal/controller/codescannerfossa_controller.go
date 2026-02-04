@@ -18,13 +18,15 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
@@ -34,6 +36,8 @@ import (
 
 	maintainerdcncfiov1alpha1 "github.com/cncf/maintainer-d/code-scanners/api/v1alpha1"
 	"github.com/cncf/maintainer-d/plugins/fossa"
+
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 // FossaClient defines the interface for FOSSA operations needed by the controller
@@ -78,7 +82,7 @@ func (r *CodeScannerFossaReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	// 1. Fetch CR
 	fossaCR := &maintainerdcncfiov1alpha1.CodeScannerFossa{}
 	if err := r.Get(ctx, req.NamespacedName, fossaCR); err != nil {
-		if errors.IsNotFound(err) {
+		if k8serrors.IsNotFound(err) {
 			log.Info("CodeScannerFossa resource not found, ignoring")
 			return ctrl.Result{}, nil
 		}
@@ -147,7 +151,7 @@ func (r *CodeScannerFossaReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	existingCM := &corev1.ConfigMap{}
 	err = r.Get(ctx, client.ObjectKeyFromObject(configMap), existingCM)
-	if err != nil && errors.IsNotFound(err) {
+	if err != nil && k8serrors.IsNotFound(err) {
 		log.Info("Creating ConfigMap", "name", configMap.Name, "namespace", configMap.Namespace)
 		if err := r.Create(ctx, configMap); err != nil {
 			log.Error(err, "Failed to create ConfigMap")
@@ -173,7 +177,55 @@ func (r *CodeScannerFossaReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	r.setCondition(fossaCR, ConditionTypeConfigMapReady, metav1.ConditionTrue,
 		ReasonConfigMapCreated, "ConfigMap ready")
 
-	// 8. Update annotations
+	// 8. Process user invitations if specified
+	var requeueAfter time.Duration
+	if len(fossaCR.Spec.FossaUserEmails) > 0 {
+		invitations, hasPending, err := r.ensureUserInvitations(ctx, fossaClient, fossaCR.Spec.FossaUserEmails, fossaCR.Status.UserInvitations)
+		fossaCR.Status.UserInvitations = invitations
+
+		if err != nil {
+			log.Error(err, "Failed to process user invitations")
+			r.setCondition(fossaCR, ConditionTypeUserInvitations, metav1.ConditionFalse,
+				ReasonInvitationsFailed, err.Error())
+			r.Recorder.Event(fossaCR, corev1.EventTypeWarning, ReasonInvitationsFailed, err.Error())
+		} else {
+			// Count statuses for condition message
+			var pending, accepted, failed int
+			for _, inv := range invitations {
+				switch inv.Status {
+				case InvitationStatusPending:
+					pending++
+				case InvitationStatusAccepted:
+					accepted++
+				case InvitationStatusFailed:
+					failed++
+				}
+			}
+
+			if failed > 0 && accepted == 0 && pending == 0 {
+				r.setCondition(fossaCR, ConditionTypeUserInvitations, metav1.ConditionFalse,
+					ReasonInvitationsFailed, fmt.Sprintf("All %d invitations failed", failed))
+			} else if failed > 0 || pending > 0 {
+				r.setCondition(fossaCR, ConditionTypeUserInvitations, metav1.ConditionFalse,
+					ReasonInvitationsPartial, fmt.Sprintf("Invitations: %d accepted, %d pending, %d failed", accepted, pending, failed))
+			} else {
+				r.setCondition(fossaCR, ConditionTypeUserInvitations, metav1.ConditionTrue,
+					ReasonInvitationsSent, fmt.Sprintf("All %d invitations accepted", accepted))
+			}
+		}
+
+		// Requeue if there are pending invitations to check status later
+		if hasPending {
+			requeueAfter = time.Hour
+		}
+	} else {
+		// No invitations requested, clear any existing invitation status
+		fossaCR.Status.UserInvitations = nil
+		r.setCondition(fossaCR, ConditionTypeUserInvitations, metav1.ConditionTrue,
+			ReasonNoInvitations, "No user invitations requested")
+	}
+
+	// 9. Update annotations
 	configMapRef := fmt.Sprintf("%s/%s", configMap.Namespace, configMap.Name)
 	if fossaCR.Annotations == nil {
 		fossaCR.Annotations = make(map[string]string)
@@ -187,7 +239,7 @@ func (r *CodeScannerFossaReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 	}
 
-	// 9. Update status
+	// 10. Update status
 	fossaCR.Status.ConfigMapRef = configMapRef
 	if err := r.Status().Update(ctx, fossaCR); err != nil {
 		log.Error(err, "Failed to update status")
@@ -200,7 +252,7 @@ func (r *CodeScannerFossaReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		"configMap", configMapRef)
 	r.Recorder.Event(fossaCR, corev1.EventTypeNormal, "Reconciled",
 		fmt.Sprintf("FOSSA team %q (ID: %d) ready", team.Name, team.ID))
-	return ctrl.Result{}, nil
+	return ctrl.Result{RequeueAfter: requeueAfter}, nil
 }
 
 func (r *CodeScannerFossaReconciler) configMapForFossa(cr *maintainerdcncfiov1alpha1.CodeScannerFossa, team *fossa.Team) *corev1.ConfigMap {
@@ -235,7 +287,7 @@ func (r *CodeScannerFossaReconciler) getFossaCredentials(ctx context.Context, na
 	}
 
 	if err := r.Get(ctx, key, secret); err != nil {
-		if errors.IsNotFound(err) {
+		if k8serrors.IsNotFound(err) {
 			return "", "", fmt.Errorf("secret %s not found in namespace %s", SecretName, namespace)
 		}
 		return "", "", fmt.Errorf("failed to get secret %s: %w", SecretName, err)
@@ -277,6 +329,138 @@ func (r *CodeScannerFossaReconciler) ensureFossaTeam(ctx context.Context, client
 
 	log.Info("FOSSA team created", "teamName", team.Name, "teamID", team.ID)
 	return team, nil
+}
+
+// ensureUserInvitations processes user invitations for FOSSA.
+// It returns the updated invitation statuses, whether any are pending, and any error.
+func (r *CodeScannerFossaReconciler) ensureUserInvitations(
+	ctx context.Context,
+	fossaClient FossaClient,
+	emails []string,
+	existingInvitations []maintainerdcncfiov1alpha1.FossaUserInvitation,
+) ([]maintainerdcncfiov1alpha1.FossaUserInvitation, bool, error) {
+	log := logf.FromContext(ctx)
+
+	// Build a map of existing invitation statuses for quick lookup
+	existingMap := make(map[string]maintainerdcncfiov1alpha1.FossaUserInvitation)
+	for _, inv := range existingInvitations {
+		existingMap[strings.ToLower(inv.Email)] = inv
+	}
+
+	// Fetch current FOSSA users to check if any are already members
+	users, err := fossaClient.FetchUsers()
+	if err != nil {
+		log.Error(err, "Failed to fetch FOSSA users")
+		return nil, false, fmt.Errorf("failed to fetch FOSSA users: %w", err)
+	}
+
+	// Build a set of existing user emails (lowercase for comparison)
+	userEmails := make(map[string]bool)
+	for _, user := range users {
+		userEmails[strings.ToLower(user.Email)] = true
+	}
+
+	var invitations []maintainerdcncfiov1alpha1.FossaUserInvitation
+	var hasPending bool
+
+	for _, email := range emails {
+		emailLower := strings.ToLower(email)
+		now := metav1.Now()
+
+		// Check if user is already a FOSSA member
+		if userEmails[emailLower] {
+			log.V(1).Info("User is already a FOSSA member", "email", email)
+			inv := maintainerdcncfiov1alpha1.FossaUserInvitation{
+				Email:      email,
+				Status:     InvitationStatusAccepted,
+				Message:    "User is already a FOSSA organization member",
+				AcceptedAt: &now,
+			}
+			// Preserve original invitation time if we had one
+			if existing, ok := existingMap[emailLower]; ok && existing.InvitedAt != nil {
+				inv.InvitedAt = existing.InvitedAt
+			}
+			invitations = append(invitations, inv)
+			continue
+		}
+
+		// Check if there's already a pending invitation
+		hasPendingInvite, err := fossaClient.HasPendingInvitation(email)
+		if err != nil {
+			log.Error(err, "Failed to check pending invitation", "email", email)
+			invitations = append(invitations, maintainerdcncfiov1alpha1.FossaUserInvitation{
+				Email:   email,
+				Status:  InvitationStatusFailed,
+				Message: fmt.Sprintf("Failed to check pending invitation: %v", err),
+			})
+			continue
+		}
+
+		if hasPendingInvite {
+			log.V(1).Info("Invitation already pending", "email", email)
+			inv := maintainerdcncfiov1alpha1.FossaUserInvitation{
+				Email:   email,
+				Status:  InvitationStatusPending,
+				Message: "Invitation pending (expires after 48h)",
+			}
+			// Preserve original invitation time if we had one
+			if existing, ok := existingMap[emailLower]; ok && existing.InvitedAt != nil {
+				inv.InvitedAt = existing.InvitedAt
+			} else {
+				inv.InvitedAt = &now
+			}
+			invitations = append(invitations, inv)
+			hasPending = true
+			continue
+		}
+
+		// Send new invitation
+		log.Info("Sending user invitation", "email", email)
+		err = fossaClient.SendUserInvitation(email)
+		if err != nil {
+			// Handle idempotency errors gracefully
+			if errors.Is(err, fossa.ErrInviteAlreadyExists) {
+				log.V(1).Info("Invitation already exists (race condition)", "email", email)
+				invitations = append(invitations, maintainerdcncfiov1alpha1.FossaUserInvitation{
+					Email:     email,
+					Status:    InvitationStatusPending,
+					Message:   "Invitation pending",
+					InvitedAt: &now,
+				})
+				hasPending = true
+				continue
+			}
+			if errors.Is(err, fossa.ErrUserAlreadyMember) {
+				log.V(1).Info("User is already a member (race condition)", "email", email)
+				invitations = append(invitations, maintainerdcncfiov1alpha1.FossaUserInvitation{
+					Email:      email,
+					Status:     InvitationStatusAccepted,
+					Message:    "User is already a FOSSA organization member",
+					AcceptedAt: &now,
+				})
+				continue
+			}
+
+			log.Error(err, "Failed to send invitation", "email", email)
+			invitations = append(invitations, maintainerdcncfiov1alpha1.FossaUserInvitation{
+				Email:   email,
+				Status:  InvitationStatusFailed,
+				Message: fmt.Sprintf("Failed to send invitation: %v", err),
+			})
+			continue
+		}
+
+		log.Info("Invitation sent successfully", "email", email)
+		invitations = append(invitations, maintainerdcncfiov1alpha1.FossaUserInvitation{
+			Email:     email,
+			Status:    InvitationStatusPending,
+			Message:   "Invitation sent",
+			InvitedAt: &now,
+		})
+		hasPending = true
+	}
+
+	return invitations, hasPending, nil
 }
 
 // setCondition updates or adds a condition to the CR status

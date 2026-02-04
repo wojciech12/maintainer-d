@@ -40,11 +40,11 @@ type mockFossaClient struct {
 	nextTeamID int
 
 	// User invitation fields
-	users                 []fossa.User
-	pendingInvitations    map[string]bool
-	sendInvitationErr     error
-	fetchUsersErr         error
-	pendingInvitationErr  error
+	users                []fossa.User
+	pendingInvitations   map[string]bool
+	sendInvitationErr    error
+	fetchUsersErr        error
+	pendingInvitationErr error
 }
 
 func newMockFossaClient() *mockFossaClient {
